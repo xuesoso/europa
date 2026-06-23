@@ -49,6 +49,24 @@ For languages that can source chunks of code:
 
     - `<LocalLeader>f` to send the entire file to the interpreter.
 
+### Code blocks (cells)
+
+Files can be divided into code blocks (also called "cells") delimited by a
+separator line, by default `# %%`, matching the convention used by Jupyter and
+VSCode. The separator is set with `cmdline_block_sep` (see Options). For
+languages that can source chunks of code, the following Normal-mode mappings
+operate on these blocks:
+
+  - `<LocalLeader>c` to execute the current code block.
+
+  - `<LocalLeader>n` to execute the current code block and jump to the next one.
+
+  - `<LocalLeader>e` to execute from the current line to the end of the block.
+
+  - `<LocalLeader>]` to jump to the next block.
+
+  - `<LocalLeader>[` to jump to the previous block.
+
 ## Options
 
 Below are examples of how to set the options in your `vimrc`:
@@ -62,6 +80,13 @@ let cmdline_map_source_fun     = '<LocalLeader>f'
 let cmdline_map_send_paragraph = '<LocalLeader>p'
 let cmdline_map_send_block     = '<LocalLeader>b'
 let cmdline_map_quit           = '<LocalLeader>q'
+
+" vimcmdline code-block (cell) mappings
+let cmdline_map_exec_block          = '<LocalLeader>c'
+let cmdline_map_exec_block_and_jump = '<LocalLeader>n'
+let cmdline_map_exec_to_end         = '<LocalLeader>e'
+let cmdline_map_next_block          = '<LocalLeader>]'
+let cmdline_map_prev_block          = '<LocalLeader>['
 
 " vimcmdline options
 let cmdline_vsplit      = 1      " Split the window vertically

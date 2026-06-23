@@ -69,13 +69,11 @@ function VimCmdLineDown()
         return
     endif
     let curline = substitute(getline("."), '^\s*', "", "")
-    let fc = curline[0]
     let lastLine = line("$")
     while i < lastLine && strlen(curline) == 0
         let i = i + 1
         call cursor(i, 1)
         let curline = substitute(getline("."), '^\s*', "", "")
-        let fc = curline[0]
     endwhile
 endfunction
 
@@ -222,6 +220,17 @@ function VimCmdLineCreateMaps()
                     \ ' :call VimCmdLineSendParagraph()<CR>'
         exe 'nmap <silent><buffer> ' . g:cmdline_map_send_block .
                     \ ' :call VimCmdLineSendMBlock()<CR>'
+        " Code-block (g:cmdline_block_sep, default '# %%') mappings
+        exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_block .
+                    \ ' :call ExecuteCurrentCodeBlock()<CR>'
+        exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_block_and_jump .
+                    \ ' :call ExecuteCurrentCodeBlockJumpNext()<CR>'
+        exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_to_end .
+                    \ ' :call ExecuteToEndCodeBlock()<CR>'
+        exe 'nmap <silent><buffer> ' . g:cmdline_map_next_block .
+                    \ ' :call ToNextCodeBlock()<CR>'
+        exe 'nmap <silent><buffer> ' . g:cmdline_map_prev_block .
+                    \ ' :call ToLastCodeBlock()<CR>'
     endif
     if exists("b:cmdline_quit_cmd")
         exe 'nmap <silent><buffer> ' . g:cmdline_map_quit . ' :call VimCmdLineQuit("' . b:cmdline_filetype . '")<CR>'
@@ -425,65 +434,66 @@ endfunction
 
 " Convenient functions to execute code block
 " Code block is assumed to be separated by the string defined in
-" g:cmdline_block_sep (default: '# %%').
+" g:cmdline_block_sep (default: '# %%'). The separator is matched literally
+" (\V) so that special characters in it are not treated as a regex.
 
-function! NextCodeBlock()
-    let b:nextblock = search(g:cmdline_block_sep, 'cWn')
+function! s:BlockSepPattern()
+    return '\V' . escape(g:cmdline_block_sep, '\')
 endfunction
 
+" Line of the next separator at or below the cursor (0 if none). The cursor
+" line itself is not accepted, so when the cursor sits on a separator we find
+" the *next* one below rather than matching the current line.
+function! NextCodeBlock()
+    return search(s:BlockSepPattern(), 'Wn')
+endfunction
+
+" Line of the nearest separator at or above the cursor (0 if none).
 function! LastCodeBlock()
-    let b:lastblock = search(g:cmdline_block_sep, 'bcWn')
+    return search(s:BlockSepPattern(), 'bcWn')
 endfunction
 
 function! ToNextCodeBlock()
-    call NextCodeBlock()
-    if (b:nextblock == 0)
-        let b:nextblock = line("$")
-        exe b:nextblock
+    let l:nextblock = NextCodeBlock()
+    if l:nextblock == 0
+        exe line("$")
     else
-        exe b:nextblock+1
+        exe l:nextblock + 1
     endif
 endfunction
 
 function! ToLastCodeBlock()
-    call LastCodeBlock()
-    if (b:lastblock <= 2)
-        let b:lastblock = 1
-        exe b:lastblock
+    let l:lastblock = LastCodeBlock()
+    if l:lastblock <= 2
+        exe 1
     else
-        exe b:lastblock-2
+        exe l:lastblock - 2
     endif
+endfunction
+
+" Last line of the current block: the line before the next separator, or the
+" last line of the buffer when there is no separator below.
+function! s:CurrentBlockEnd()
+    let l:nextblock = NextCodeBlock()
+    return l:nextblock == 0 ? line("$") : l:nextblock - 1
 endfunction
 
 function! ExecuteCurrentCodeBlock()
-    call NextCodeBlock()
-    call LastCodeBlock()
-    if (b:nextblock == 0)
-        let b:nextblock = line("$")
-    else
-        let b:nextblock = b:nextblock
-    endif
-    let b:lines = getline(b:lastblock+1, b:nextblock-1)
-    call b:cmdline_source_fun(b:lines)
+    let l:start = LastCodeBlock() + 1
+    let l:lines = getline(l:start, s:CurrentBlockEnd())
+    call b:cmdline_source_fun(l:lines)
 endfunction
 
 function! ExecuteToEndCodeBlock()
-    let b:last_codeline = line(".")
-    call NextCodeBlock()
-    if (b:nextblock == 0)
-        let b:nextblock = line("$")
-    else
-        let b:nextblock = b:nextblock
-    endif
-    let b:lines = getline(b:last_codeline, b:nextblock-1)
-    call b:cmdline_source_fun(b:lines)
+    let l:lines = getline(line("."), s:CurrentBlockEnd())
+    call b:cmdline_source_fun(l:lines)
 endfunction
 
 function! ExecuteCurrentCodeBlockJumpNext()
-    call LastCodeBlock()
+    let l:start = LastCodeBlock() + 1
+    let l:lines = getline(l:start, s:CurrentBlockEnd())
+    call b:cmdline_source_fun(l:lines)
     call ToNextCodeBlock()
-    let b:lines = getline(b:lastblock+1, b:nextblock-1)
-    call b:cmdline_source_fun(b:lines)
 endfunction
 
 
@@ -508,4 +518,19 @@ if !exists("g:cmdline_map_send_block")
 endif
 if !exists("g:cmdline_map_quit")
     let g:cmdline_map_quit = "<LocalLeader>q"
+endif
+if !exists("g:cmdline_map_exec_block")
+    let g:cmdline_map_exec_block = "<LocalLeader>c"
+endif
+if !exists("g:cmdline_map_exec_block_and_jump")
+    let g:cmdline_map_exec_block_and_jump = "<LocalLeader>n"
+endif
+if !exists("g:cmdline_map_exec_to_end")
+    let g:cmdline_map_exec_to_end = "<LocalLeader>e"
+endif
+if !exists("g:cmdline_map_next_block")
+    let g:cmdline_map_next_block = "<LocalLeader>]"
+endif
+if !exists("g:cmdline_map_prev_block")
+    let g:cmdline_map_prev_block = "<LocalLeader>["
 endif
