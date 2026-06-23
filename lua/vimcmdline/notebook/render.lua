@@ -45,6 +45,67 @@ local function flatten(c)
   return out
 end
 
+local BORDER_HL = 'CmdlineNotebookBorder'
+
+local BORDERS = {
+  rounded = { tl = '╭', tr = '╮', bl = '╰', br = '╯', h = '─', v = '│' },
+  single  = { tl = '┌', tr = '┐', bl = '└', br = '┘', h = '─', v = '│' },
+  double  = { tl = '╔', tr = '╗', bl = '╚', br = '╝', h = '═', v = '║' },
+}
+
+-- Truncate text to a maximum display width, adding an ellipsis if cut.
+local function trunc(text, width)
+  if vim.fn.strdisplaywidth(text) <= width then
+    return text
+  end
+  local lo, hi = 0, vim.fn.strchars(text)
+  while lo < hi do
+    local mid = math.floor((lo + hi + 1) / 2)
+    if vim.fn.strdisplaywidth(vim.fn.strcharpart(text, 0, mid)) <= width - 1 then
+      lo = mid
+    else
+      hi = mid - 1
+    end
+  end
+  return vim.fn.strcharpart(text, 0, lo) .. '…'
+end
+
+-- Turn the {text, hlgroup} lines into extmark virt_lines, optionally wrapped in
+-- a box with the given border style (nil/'none'/unknown => no box).
+local function build_virt(lines, border)
+  local b = BORDERS[border]
+  if not b then
+    local virt = {}
+    for _, l in ipairs(lines) do
+      virt[#virt + 1] = { { l[1], l[2] } }
+    end
+    return virt
+  end
+  local cap = math.max((vim.o.columns or 80) - 4, 10)
+  local width = 0
+  for _, l in ipairs(lines) do
+    local w = vim.fn.strdisplaywidth(l[1])
+    if w > width then
+      width = w
+    end
+  end
+  if width > cap then
+    width = cap
+  end
+  local virt = { { { b.tl .. string.rep(b.h, width + 2) .. b.tr, BORDER_HL } } }
+  for _, l in ipairs(lines) do
+    local text = trunc(l[1], width)
+    local pad = width - vim.fn.strdisplaywidth(text)
+    virt[#virt + 1] = {
+      { b.v .. ' ', BORDER_HL },
+      { text, l[2] },
+      { string.rep(' ', pad) .. ' ' .. b.v, BORDER_HL },
+    }
+  end
+  virt[#virt + 1] = { { b.bl .. string.rep(b.h, width + 2) .. b.br, BORDER_HL } }
+  return virt
+end
+
 local function redraw(bufnr, cell_id)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -73,10 +134,7 @@ local function redraw(bufnr, cell_id)
     end
     return
   end
-  local virt = {}
-  for _, l in ipairs(lines) do
-    virt[#virt + 1] = { { l[1], l[2] } }
-  end
+  local virt = build_virt(lines, c.border)
   local linecount = vim.api.nvim_buf_line_count(bufnr)
   local line0 = math.min(math.max(c.end_line - 1, 0), linecount - 1)
   local opts = {
@@ -111,7 +169,7 @@ local function schedule(bufnr, cell_id)
 end
 
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
-function M.begin(bufnr, cell_id, start_line, end_line, max_lines)
+function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border)
   local s = bstate(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
   s.cells[cell_id] = {
@@ -121,6 +179,7 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines)
     mark_id = nil,
     pending = false,
     max_lines = max_lines,
+    border = border,
   }
 end
 

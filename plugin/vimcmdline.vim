@@ -46,6 +46,7 @@ let g:cmdline_notebook_python = get(g:, 'cmdline_notebook_python', '')
 let g:cmdline_notebook_kernel_name = get(g:, 'cmdline_notebook_kernel_name', 'python3')
 let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
 let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
+let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 
 " Internal variables
 let g:cmdline_job = {}
@@ -591,6 +592,7 @@ if has('nvim') && g:cmdline_notebook_enable
     hi default link CmdlineNotebookError  ErrorMsg
     hi default link CmdlineNotebookResult Identifier
     hi default link CmdlineNotebookPrompt Comment
+    hi default link CmdlineNotebookBorder Comment
 
     " Line range of the cell under the cursor (after the separator above to the
     " line before the next separator, or end of buffer).

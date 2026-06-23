@@ -260,9 +260,23 @@ let cmdline_notebook_plotty         = 1        " import plotty; plotty.enable()
 let cmdline_notebook_startup_code   = []       " extra Python run at kernel start
 let cmdline_notebook_max_lines      = 20       " inline output line cap per cell
 let cmdline_notebook_kernel_timeout = 30       " seconds to wait for the kernel
+let cmdline_notebook_border         = 'rounded' " output box: rounded/single/double/none
 let cmdline_map_notebook_toggle     = '<LocalLeader>k'
 let cmdline_map_notebook_clear      = '<LocalLeader>K'
 ```
+
+Inline output is drawn in a box, by default with a soft rounded border:
+
+```
+╭─────────────╮
+│ hello world │
+│ 42          │
+╰─────────────╯
+```
+
+Set `cmdline_notebook_border` to `'single'`, `'double'`, or `'none'` to change
+or disable it. The border uses the `CmdlineNotebookBorder` highlight group
+(linked to `Comment` by default), which you can override.
 
 To customize plotty (e.g. its pane size), set `cmdline_notebook_plotty = 0` and
 enable it yourself via `cmdline_notebook_startup_code`, for example:

@@ -131,7 +131,7 @@ function M.execute_cell(bufnr, end_line, lines)
   b.cell_seq = b.cell_seq + 1
   local cell_id = b.cell_seq
   local start_line = math.max(end_line - #lines + 1, 1)
-  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines)
+  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border)
   local req = { type = 'execute', cell_id = cell_id, code = table.concat(lines, '\n') }
   if b.ready then
     b.handle.send(req)

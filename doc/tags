@@ -4,6 +4,7 @@ cmdline_block_sep	vimcmdline.txt	/*cmdline_block_sep*
 cmdline_esc_term	vimcmdline.txt	/*cmdline_esc_term*
 cmdline_external_term_cmd	vimcmdline.txt	/*cmdline_external_term_cmd*
 cmdline_in_buffer	vimcmdline.txt	/*cmdline_in_buffer*
+cmdline_notebook_border	vimcmdline.txt	/*cmdline_notebook_border*
 cmdline_notebook_enable	vimcmdline.txt	/*cmdline_notebook_enable*
 cmdline_notebook_kernel_name	vimcmdline.txt	/*cmdline_notebook_kernel_name*
 cmdline_notebook_kernel_timeout	vimcmdline.txt	/*cmdline_notebook_kernel_timeout*

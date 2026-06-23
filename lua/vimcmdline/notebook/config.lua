@@ -23,6 +23,7 @@ function M.read()
   cfg.kernel_name = gget('cmdline_notebook_kernel_name', 'python3')
   cfg.max_lines = gget('cmdline_notebook_max_lines', 20)
   cfg.kernel_timeout = gget('cmdline_notebook_kernel_timeout', 30)
+  cfg.border = gget('cmdline_notebook_border', 'rounded')
   if type(cfg.python) ~= 'string' or cfg.python == '' then
     cfg.python = 'python3'
   end

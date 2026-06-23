@@ -240,6 +240,12 @@ cmdline_notebook_max_lines  Maximum inline output lines shown per cell before
 							*cmdline_notebook_kernel_timeout*
 cmdline_notebook_kernel_timeout  Seconds to wait for the kernel. Default: 30.
 
+							*cmdline_notebook_border*
+cmdline_notebook_border   Border drawn around inline output: 'rounded'
+			(default), 'single', 'double', or 'none'. Uses the
+			CmdlineNotebookBorder highlight group (linked to
+			Comment by default).
+
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*
 
