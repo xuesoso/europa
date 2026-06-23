@@ -83,4 +83,10 @@ let b:cmdline_filetype = "python"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
+" Notebook mode toggle (Neovim only, opt-in via g:cmdline_notebook_enable)
+if has('nvim') && g:cmdline_notebook_enable
+    exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_toggle . ' :call VimCmdLineNotebookToggle()<CR>'
+    exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_clear . ' :CmdLineNotebookClear<CR>'
+endif
+
 call VimCmdLineSetApp("python")

@@ -12,7 +12,8 @@ CONTENTS						*vimcmdline*
 	4. Code blocks .................. |vimcmdline_blocks|
 	5. Options ...................... |vimcmdline_options|
 	6. Colors ....................... |vimcmdline_colors|
-	7. New languages ................ |vimcmdline_newlang|
+	7. Notebook mode ................ |vimcmdline-notebook|
+	8. New languages ................ |vimcmdline_newlang|
 
 ==============================================================================
 1. Overview						*vimcmdline_overview*
@@ -64,6 +65,10 @@ Code-block (cell) mappings, see |vimcmdline_blocks|: >
 	<LocalLeader>]		Jump to the next block
 	<LocalLeader>[		Jump to the previous block
 <
+Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
+	<LocalLeader>k		Toggle notebook mode (start/stop the kernel)
+	<LocalLeader>K		Clear the output under the current cell
+<
 ==============================================================================
 4. Code blocks						*vimcmdline_blocks*
 
@@ -97,7 +102,11 @@ Mapping options (value is the key sequence to use): >
 	cmdline_map_exec_to_end
 	cmdline_map_next_block
 	cmdline_map_prev_block
+	cmdline_map_notebook_toggle
+	cmdline_map_notebook_clear
 <
+For notebook-mode options see |vimcmdline-notebook|.
+
 							*cmdline_app*
 cmdline_app		Dictionary mapping a file type to the interpreter
 			command to run for it. Example: >
@@ -165,7 +174,74 @@ highlighting specification. To follow the current |colorscheme| instead, set: >
 See the README for the full list of cmdline_color_* options and examples.
 
 ==============================================================================
-7. Adding support for a new language			*vimcmdline_newlang*
+7. Notebook mode					*vimcmdline-notebook*
+							*vimcmdline_notebook*
+
+Notebook mode is an optional, toggleable alternative to the REPL transports
+(Neovim only, Python only). Each code block (|vimcmdline_blocks|) is run by a
+headless Jupyter (ipykernel) kernel and its TEXT output is shown inline,
+directly under the cell, using virtual lines. Images/plots are rendered by the
+plotty package (https://github.com/xuesoso/plotty) in its own tmux pane
+(sixel/kitty, works over SSH); vimcmdline never draws images itself.
+
+The mode is off by default and changes no existing behavior. Run
+:checkhealth vimcmdline to verify prerequisites.
+
+Requirements:
+  - Neovim 0.10+.
+  - Python with jupyter_client and ipykernel:
+      pip install jupyter_client ipykernel
+  - For inline plots: pip install plotty, and run inside tmux (>= 3.4) in a
+    sixel/kitty-capable terminal.
+
+Enable it in your |vimrc|: >
+	let cmdline_notebook_enable = 1
+<
+Then toggle it in a buffer with |<LocalLeader>k| (or :CmdLineNotebookToggle).
+While on, the cell mappings (|vimcmdline_mappings|) and the send mappings run
+through the kernel and render output inline instead of to a REPL.
+
+Commands: >
+	:CmdLineNotebookToggle      toggle notebook mode (start/stop kernel)
+	:CmdLineNotebookStart       start the kernel
+	:CmdLineNotebookStop        stop the kernel
+	:CmdLineNotebookRestart     restart the kernel (clears output)
+	:CmdLineNotebookInterrupt   interrupt the running cell
+	:CmdLineNotebookClear       clear output under the current cell
+	:CmdLineNotebookClearAll    clear all output in the buffer
+	:CmdLineNotebookOpenOutput  open the current cell's full output in a split
+<
+Options:
+							*cmdline_notebook_enable*
+cmdline_notebook_enable   Master switch for notebook mode. When 0 (default),
+			none of the commands, mappings, or autocommands are
+			defined and behavior is unchanged.
+
+							*cmdline_notebook_python*
+cmdline_notebook_python   Python executable that runs the kernel bridge (must
+			have jupyter_client + ipykernel). Default: 'python3'.
+
+							*cmdline_notebook_kernel_name*
+cmdline_notebook_kernel_name  Jupyter kernelspec name. Default: 'python3'.
+
+							*cmdline_notebook_plotty*
+cmdline_notebook_plotty   When 1 (default), run "import plotty; plotty.enable()"
+			at kernel start (ignored if plotty is not installed).
+
+							*cmdline_notebook_startup_code*
+cmdline_notebook_startup_code  List of extra Python lines run once at kernel
+			start, e.g. to enable plotty with custom options.
+
+							*cmdline_notebook_max_lines*
+cmdline_notebook_max_lines  Maximum inline output lines shown per cell before
+			truncation. Default: 20. Use :CmdLineNotebookOpenOutput
+			to see the full output.
+
+							*cmdline_notebook_kernel_timeout*
+cmdline_notebook_kernel_timeout  Seconds to wait for the kernel. Default: 30.
+
+==============================================================================
+8. Adding support for a new language			*vimcmdline_newlang*
 
   1. Copy the script in the ftplugin directory whose language is closest to
      the one you want to support, and save it as "filetype_cmdline.vim" where

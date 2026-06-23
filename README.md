@@ -198,6 +198,80 @@ Your `~/.inputrc` should not include `set keymap vi` because it would cause
 some applications to start in vi's edit mode. Then, you would always have to
 press either `a` or `i` in the interpreter console before using it.
 
+## Notebook mode (Neovim, Python)
+
+Notebook mode is an optional, toggleable alternative to the REPL transports. In
+this mode the code in a buffer is treated like the cells of a Jupyter notebook:
+each cell is run by a headless Jupyter (`ipykernel`) kernel and its **text
+output is shown inline, directly under the cell**, instead of in a separate
+terminal. Plots and other images are rendered by
+[plotty](https://github.com/xuesoso/plotty) in its own tmux pane (sixel/kitty,
+works over SSH), so vimcmdline stays a terminal-only program and never draws
+images itself.
+
+The mode is off by default and does not change any existing behavior. It is
+Neovim-only and, for now, Python-only.
+
+### Requirements
+
+  - Neovim 0.10 or newer.
+  - The interpreter's Python must have `jupyter_client` and `ipykernel`:
+    `pip install jupyter_client ipykernel`.
+  - For inline plots: `pip install plotty`, and run Neovim inside `tmux` (≥ 3.4)
+    in a sixel- or kitty-capable terminal. See plotty's documentation.
+
+Run `:checkhealth vimcmdline` to verify the prerequisites.
+
+### Enabling and using it
+
+Opt in once in your `vimrc`:
+
+```vim
+let cmdline_notebook_enable = 1
+" Optional: point at the Python that has jupyter_client/ipykernel/plotty
+let cmdline_notebook_python  = 'python3'
+```
+
+Then, in a supported buffer:
+
+  - `<LocalLeader>k` toggles notebook mode on/off (starts/stops the kernel).
+
+While notebook mode is on, the existing cell mappings send to the kernel and
+render output inline instead of to a REPL:
+
+  - `<LocalLeader>c` run the current cell, `<LocalLeader>n` run it and jump to
+    the next, `<LocalLeader>e` run to the end of the cell.
+  - `<Space>` / visual `<Space>` / `<LocalLeader>p` / `<LocalLeader>b` /
+    `<LocalLeader>f` also run through the kernel.
+  - `<LocalLeader>K` clears the output under the current cell.
+
+Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
+`:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
+`:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`,
+`:CmdLineNotebookOpenOutput` (opens long/truncated output in a scratch split).
+
+### Options
+
+```vim
+let cmdline_notebook_enable         = 1        " master switch (default 0)
+let cmdline_notebook_python         = 'python3' " python with the kernel deps
+let cmdline_notebook_kernel_name    = 'python3' " jupyter kernelspec name
+let cmdline_notebook_plotty         = 1        " import plotty; plotty.enable()
+let cmdline_notebook_startup_code   = []       " extra Python run at kernel start
+let cmdline_notebook_max_lines      = 20       " inline output line cap per cell
+let cmdline_notebook_kernel_timeout = 30       " seconds to wait for the kernel
+let cmdline_map_notebook_toggle     = '<LocalLeader>k'
+let cmdline_map_notebook_clear      = '<LocalLeader>K'
+```
+
+To customize plotty (e.g. its pane size), set `cmdline_notebook_plotty = 0` and
+enable it yourself via `cmdline_notebook_startup_code`, for example:
+
+```vim
+let cmdline_notebook_plotty       = 0
+let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
+```
+
 ## How to add support for a new language
 
   1. Look at the Vim scripts in the `ftplugin` directory and make a copy of

@@ -38,6 +38,15 @@ let g:cmdline_outhl = get(g:, 'cmdline_outhl', 1)
 let g:cmdline_auto_scroll = get(g:, 'cmdline_auto_scroll', 1)
 let g:cmdline_block_sep = get(g:, 'cmdline_block_sep', '# %%')
 
+" Notebook mode options (Neovim only; see :help vimcmdline-notebook)
+let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 0)
+let g:cmdline_notebook_plotty = get(g:, 'cmdline_notebook_plotty', 1)
+let g:cmdline_notebook_startup_code = get(g:, 'cmdline_notebook_startup_code', [])
+let g:cmdline_notebook_python = get(g:, 'cmdline_notebook_python', '')
+let g:cmdline_notebook_kernel_name = get(g:, 'cmdline_notebook_kernel_name', 'python3')
+let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
+let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
+
 " Internal variables
 let g:cmdline_job = {}
 let g:cmdline_termbuf = {}
@@ -250,6 +259,11 @@ function VimCmdLineStartApp()
         call mkdir(g:cmdline_tmp_dir)
     endif
 
+    if get(b:, 'cmdline_notebook', 0)
+        call v:lua.require'vimcmdline.notebook'.start(bufnr('%'))
+        return
+    endif
+
     if exists("g:cmdline_external_term_cmd")
         call VimCmdLineStart_ExTerm(b:cmdline_app)
     else
@@ -309,6 +323,11 @@ endfunction
 
 " Send current line to the interpreter and go down to the next non empty line
 function VimCmdLineSendLine()
+    if get(b:, 'cmdline_notebook', 0)
+        call s:CmdLineCellSink([getline(".")], line("."))
+        call VimCmdLineDown()
+        return
+    endif
     if exists('*b:cmdline_send')
         call b:cmdline_send()
         return
@@ -322,6 +341,10 @@ endfunction
 
 " Send current line to the interpreter and but keep cursor on current line
 function VimCmdLineSendLineAndStay()
+    if get(b:, 'cmdline_notebook', 0)
+        call s:CmdLineCellSink([getline(".")], line("."))
+        return
+    endif
     let line = getline(".")
     if strlen(line) > 0 || b:cmdline_send_empty
         call VimCmdLineSendCmd(line)
@@ -334,9 +357,13 @@ function VimCmdLineSendSelection()
         let j = col("'>") - i
         let l = getline("'<")
         let line = strpart(l, i, j)
-        call VimCmdLineSendCmd(line)
+        if get(b:, 'cmdline_notebook', 0)
+            call s:CmdLineCellSink([line], line("'>"))
+        else
+            call VimCmdLineSendCmd(line)
+        endif
     elseif exists("b:cmdline_source_fun")
-        call b:cmdline_source_fun(getline("'<", "'>"))
+        call s:CmdLineCellSink(getline("'<", "'>"), line("'>"))
     endif
 endfunction
 
@@ -354,7 +381,7 @@ function VimCmdLineSendParagraph()
         endif
     endwhile
     let lines = getline(i, j)
-    call b:cmdline_source_fun(lines)
+    call s:CmdLineCellSink(lines, j)
     if j < max
         call cursor(j, 1)
     else
@@ -390,7 +417,7 @@ function VimCmdLineSendMBlock()
         let lineB -= 1
     endif
     let lines = getline(lineA, lineB)
-    call b:cmdline_source_fun(lines)
+    call s:CmdLineCellSink(lines, lineB)
 endfunction
 
 " Quit the interpreter
@@ -478,21 +505,35 @@ function! s:CurrentBlockEnd()
     return l:nextblock == 0 ? line("$") : l:nextblock - 1
 endfunction
 
+" Route a cell's lines to its sink: the inline notebook kernel when notebook
+" mode is on for this buffer, otherwise the classic REPL via b:cmdline_source_fun.
+" a:endline is the buffer line the output is anchored under in notebook mode.
+function! s:CmdLineCellSink(lines, endline)
+    if get(b:, 'cmdline_notebook', 0)
+        call v:lua.require'vimcmdline.notebook'.execute_cell(bufnr('%'), a:endline, a:lines)
+    else
+        call b:cmdline_source_fun(a:lines)
+    endif
+endfunction
+
 function! ExecuteCurrentCodeBlock()
     let l:start = LastCodeBlock() + 1
-    let l:lines = getline(l:start, s:CurrentBlockEnd())
-    call b:cmdline_source_fun(l:lines)
+    let l:end = s:CurrentBlockEnd()
+    let l:lines = getline(l:start, l:end)
+    call s:CmdLineCellSink(l:lines, l:end)
 endfunction
 
 function! ExecuteToEndCodeBlock()
-    let l:lines = getline(line("."), s:CurrentBlockEnd())
-    call b:cmdline_source_fun(l:lines)
+    let l:end = s:CurrentBlockEnd()
+    let l:lines = getline(line("."), l:end)
+    call s:CmdLineCellSink(l:lines, l:end)
 endfunction
 
 function! ExecuteCurrentCodeBlockJumpNext()
     let l:start = LastCodeBlock() + 1
-    let l:lines = getline(l:start, s:CurrentBlockEnd())
-    call b:cmdline_source_fun(l:lines)
+    let l:end = s:CurrentBlockEnd()
+    let l:lines = getline(l:start, l:end)
+    call s:CmdLineCellSink(l:lines, l:end)
     call ToNextCodeBlock()
 endfunction
 
@@ -533,4 +574,68 @@ if !exists("g:cmdline_map_next_block")
 endif
 if !exists("g:cmdline_map_prev_block")
     let g:cmdline_map_prev_block = "<LocalLeader>["
+endif
+if !exists("g:cmdline_map_notebook_toggle")
+    let g:cmdline_map_notebook_toggle = "<LocalLeader>k"
+endif
+if !exists("g:cmdline_map_notebook_clear")
+    let g:cmdline_map_notebook_clear = "<LocalLeader>K"
+endif
+
+" Notebook mode (Neovim only, opt-in via g:cmdline_notebook_enable). When the
+" gate below is false, none of the commands/functions/highlights are defined
+" and the inert get(b:, 'cmdline_notebook', 0) guards keep classic behavior.
+if has('nvim') && g:cmdline_notebook_enable
+    hi default link CmdlineNotebookStdout Normal
+    hi default link CmdlineNotebookStderr WarningMsg
+    hi default link CmdlineNotebookError  ErrorMsg
+    hi default link CmdlineNotebookResult Identifier
+    hi default link CmdlineNotebookPrompt Comment
+
+    " Line range of the cell under the cursor (after the separator above to the
+    " line before the next separator, or end of buffer).
+    function! s:NotebookCellRange()
+        let l:start = LastCodeBlock() + 1
+        let l:next = NextCodeBlock()
+        let l:end = l:next == 0 ? line('$') : l:next - 1
+        return [l:start, l:end]
+    endfunction
+
+    function! VimCmdLineNotebookToggle()
+        if get(b:, 'cmdline_notebook', 0)
+            let b:cmdline_notebook = 0
+            call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
+            echomsg 'vimcmdline: notebook mode off'
+            return
+        endif
+        if !exists("b:cmdline_app")
+            echohl WarningMsg | echomsg 'vimcmdline: notebook mode is not supported for this filetype.' | echohl Normal
+            return
+        endif
+        if has_key(g:cmdline_job, b:cmdline_filetype) && g:cmdline_job[b:cmdline_filetype] != 0
+            echohl WarningMsg | echomsg 'vimcmdline: quit the running REPL (' . g:cmdline_map_quit . ') before enabling notebook mode.' | echohl Normal
+            return
+        endif
+        let b:cmdline_notebook = 1
+        call VimCmdLineStartApp()
+    endfunction
+
+    function! VimCmdLineNotebookClear()
+        let l:r = s:NotebookCellRange()
+        call v:lua.require'vimcmdline.notebook'.clear_cell(bufnr('%'), l:r[0], l:r[1])
+    endfunction
+
+    function! VimCmdLineNotebookOpenOutput()
+        let l:r = s:NotebookCellRange()
+        call v:lua.require'vimcmdline.notebook'.open_output(bufnr('%'), l:r[0], l:r[1])
+    endfunction
+
+    command! CmdLineNotebookToggle     call VimCmdLineNotebookToggle()
+    command! CmdLineNotebookStart      let b:cmdline_notebook = 1 | call VimCmdLineStartApp()
+    command! CmdLineNotebookStop       call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
+    command! CmdLineNotebookRestart    call v:lua.require'vimcmdline.notebook'.restart(bufnr('%'))
+    command! CmdLineNotebookInterrupt  call v:lua.require'vimcmdline.notebook'.interrupt(bufnr('%'))
+    command! CmdLineNotebookClear      call VimCmdLineNotebookClear()
+    command! CmdLineNotebookClearAll   call v:lua.require'vimcmdline.notebook'.clear_all_output(bufnr('%'))
+    command! CmdLineNotebookOpenOutput call VimCmdLineNotebookOpenOutput()
 endif

@@ -1,0 +1,196 @@
+-- Inline output rendering via extmark virtual lines, one mark per executed cell.
+local M = {}
+
+M.ns = vim.api.nvim_create_namespace('vimcmdline_notebook')
+
+-- bufnr -> { cells = { [cell_id] = {end_line,start_line,segments,mark_id,pending,max_lines} } }
+local state = {}
+
+local HL = {
+  stdout = 'CmdlineNotebookStdout',
+  stderr = 'CmdlineNotebookStderr',
+  error  = 'CmdlineNotebookError',
+  result = 'CmdlineNotebookResult',
+  info   = 'CmdlineNotebookPrompt',
+}
+
+local function bstate(bufnr)
+  state[bufnr] = state[bufnr] or { cells = {} }
+  return state[bufnr]
+end
+
+local function cell(bufnr, cell_id)
+  local s = state[bufnr]
+  return s and s.cells[cell_id] or nil
+end
+
+-- Flatten accumulated segments into a list of {text, hlgroup} screen lines.
+local function flatten(c)
+  local out = {}
+  for _, seg in ipairs(c.segments) do
+    local group = HL[seg.kind] or HL.stdout
+    local parts = vim.split(seg.text, '\n', { plain = true })
+    -- A segment ending in a newline yields a trailing "" — drop it so the next
+    -- segment is not preceded by a spurious blank line.
+    if #parts > 1 and parts[#parts] == '' then
+      table.remove(parts)
+    end
+    for _, part in ipairs(parts) do
+      out[#out + 1] = { part, group }
+    end
+  end
+  while #out > 0 and out[#out][1] == '' do
+    table.remove(out)
+  end
+  return out
+end
+
+local function redraw(bufnr, cell_id)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local c = cell(bufnr, cell_id)
+  if not c then
+    return
+  end
+  local lines = flatten(c)
+  local max = c.max_lines
+  if max and max > 0 and #lines > max then
+    local kept = {}
+    for i = 1, max - 1 do
+      kept[i] = lines[i]
+    end
+    kept[#kept + 1] = {
+      ('… %d more lines (:CmdLineNotebookOpenOutput)'):format(#lines - (max - 1)),
+      HL.info,
+    }
+    lines = kept
+  end
+  if #lines == 0 then
+    if c.mark_id then
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
+      c.mark_id = nil
+    end
+    return
+  end
+  local virt = {}
+  for _, l in ipairs(lines) do
+    virt[#virt + 1] = { { l[1], l[2] } }
+  end
+  local linecount = vim.api.nvim_buf_line_count(bufnr)
+  local line0 = math.min(math.max(c.end_line - 1, 0), linecount - 1)
+  local opts = {
+    virt_lines = virt,
+    virt_lines_above = false,
+    invalidate = true,
+    undo_restore = false,
+  }
+  if c.mark_id then
+    opts.id = c.mark_id
+  end
+  local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.ns, line0, 0, opts)
+  if ok then
+    c.mark_id = id
+  end
+end
+
+-- Coalesce rapid updates so a chatty loop does not thrash the screen.
+local function schedule(bufnr, cell_id)
+  local c = cell(bufnr, cell_id)
+  if not c or c.pending then
+    return
+  end
+  c.pending = true
+  vim.defer_fn(function()
+    local cc = cell(bufnr, cell_id)
+    if cc then
+      cc.pending = false
+      redraw(bufnr, cell_id)
+    end
+  end, 40)
+end
+
+-- Begin a fresh cell run: clear any prior output anchored in the cell's range.
+function M.begin(bufnr, cell_id, start_line, end_line, max_lines)
+  local s = bstate(bufnr)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
+  s.cells[cell_id] = {
+    end_line = end_line,
+    start_line = start_line,
+    segments = {},
+    mark_id = nil,
+    pending = false,
+    max_lines = max_lines,
+  }
+end
+
+function M.add(bufnr, cell_id, kind, text)
+  local c = cell(bufnr, cell_id)
+  if not c then
+    return
+  end
+  local last = c.segments[#c.segments]
+  if last and last.kind == kind then
+    last.text = last.text .. text
+  else
+    c.segments[#c.segments + 1] = { kind = kind, text = text }
+  end
+  schedule(bufnr, cell_id)
+end
+
+-- Force an immediate redraw (called on idle / execute_reply).
+function M.finish(bufnr, cell_id)
+  local c = cell(bufnr, cell_id)
+  if not c then
+    return
+  end
+  c.pending = false
+  redraw(bufnr, cell_id)
+end
+
+function M.clear_all(bufnr)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, 0, -1)
+  if state[bufnr] then
+    state[bufnr].cells = {}
+  end
+end
+
+function M.clear_range(bufnr, start_line, end_line)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
+  local s = state[bufnr]
+  if s then
+    for id, c in pairs(s.cells) do
+      if c.end_line >= start_line and c.end_line <= end_line then
+        s.cells[id] = nil
+      end
+    end
+  end
+end
+
+local function find_cell(bufnr, start_line, end_line)
+  local s = state[bufnr]
+  if not s then
+    return nil
+  end
+  for _, c in pairs(s.cells) do
+    if c.end_line >= start_line and c.end_line <= end_line then
+      return c
+    end
+  end
+  return nil
+end
+
+-- Full (untruncated) output text for the cell in a line range, as a list.
+function M.get_range_text(bufnr, start_line, end_line)
+  local c = find_cell(bufnr, start_line, end_line)
+  if not c then
+    return nil
+  end
+  local out = {}
+  for _, l in ipairs(flatten(c)) do
+    out[#out + 1] = l[1]
+  end
+  return out
+end
+
+return M
