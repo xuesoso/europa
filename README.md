@@ -262,6 +262,7 @@ let cmdline_notebook_max_lines      = 20       " inline output line cap per cell
 let cmdline_notebook_kernel_timeout = 30       " seconds to wait for the kernel
 let cmdline_notebook_border         = 'rounded' " output box: rounded/single/double/none
 let cmdline_notebook_border_color   = '#005faf' " border color (default dark blue)
+let cmdline_notebook_statusline     = 1        " show kernel status in the statusline
 let cmdline_map_notebook_toggle     = '<LocalLeader>k'
 let cmdline_map_notebook_clear      = '<LocalLeader>K'
 ```

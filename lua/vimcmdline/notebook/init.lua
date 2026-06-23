@@ -32,6 +32,19 @@ function M.is_active(bufnr)
   return b ~= nil and b.handle ~= nil
 end
 
+-- 'off' | 'starting' | 'ready', for the statusline.
+function M.status(bufnr)
+  local b = buffers[resolve(bufnr)]
+  if not b or not b.handle then
+    return 'off'
+  end
+  return b.ready and 'ready' or 'starting'
+end
+
+local function refresh_status()
+  pcall(vim.cmd, 'redrawstatus!')
+end
+
 local function setup_autocmds(bufnr)
   local grp = vim.api.nvim_create_augroup('vimcmdline_notebook_' .. bufnr, { clear = true })
   vim.api.nvim_create_autocmd('BufWipeout', {
@@ -79,6 +92,7 @@ function M.start(bufnr)
   })
   notify('starting Python kernel…')
   setup_autocmds(bufnr)
+  refresh_status()
   return true
 end
 
@@ -94,6 +108,7 @@ function M.stop(bufnr)
   render.clear_all(bufnr)
   set_flag(bufnr, 0)
   pcall(vim.api.nvim_del_augroup_by_name, 'vimcmdline_notebook_' .. bufnr)
+  refresh_status()
 end
 
 function M.restart(bufnr)
@@ -161,6 +176,7 @@ function M._on_event(bufnr, ev)
     b.ready = true
     notify('kernel ready')
     M._flush_queue(bufnr)
+    refresh_status()
   elseif t == 'stream' then
     render.add(bufnr, ev.cell_id, ev.name == 'stderr' and 'stderr' or 'stdout', ev.text or '')
   elseif t == 'execute_result' then
@@ -207,6 +223,7 @@ function M._on_exit(bufnr, code)
     notify('kernel bridge exited (code ' .. tostring(code) .. ')', vim.log.levels.WARN)
   end
   set_flag(bufnr, 0)
+  refresh_status()
 end
 
 function M.clear_cell(bufnr, start_line, end_line)

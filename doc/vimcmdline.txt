@@ -251,6 +251,12 @@ cmdline_notebook_border_color  Color of the output border. Accepts a #rrggbb
 			argument string (like the cmdline_color_* options).
 			Defaults to dark blue (#005faf / cterm 25).
 
+							*cmdline_notebook_statusline*
+cmdline_notebook_statusline  When 1 (default), append a kernel-status segment
+			to 'statusline' (" ⏳ kernel" while starting, " ● kernel"
+			when ready, empty otherwise). Set to 0 to manage it
+			yourself with the VimCmdLineNotebookStatus() function.
+
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*
 

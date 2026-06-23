@@ -47,6 +47,7 @@ let g:cmdline_notebook_kernel_name = get(g:, 'cmdline_notebook_kernel_name', 'py
 let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
 let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
+let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
 
 " Internal variables
 let g:cmdline_job = {}
@@ -665,4 +666,22 @@ if has('nvim') && g:cmdline_notebook_enable
     command! CmdLineNotebookClear      call VimCmdLineNotebookClear()
     command! CmdLineNotebookClearAll   call v:lua.require'vimcmdline.notebook'.clear_all_output(bufnr('%'))
     command! CmdLineNotebookOpenOutput call VimCmdLineNotebookOpenOutput()
+
+    " Statusline segment: empty unless notebook mode is on for this buffer.
+    function! VimCmdLineNotebookStatus() abort
+        if !get(b:, 'cmdline_notebook', 0)
+            return ''
+        endif
+        let l:s = luaeval("require('vimcmdline.notebook').status(_A)", bufnr('%'))
+        return l:s ==# 'ready' ? ' ● kernel' : l:s ==# 'starting' ? ' ⏳ kernel' : ''
+    endfunction
+
+    " Add it to the statusline (default on). Seed the standard statusline first
+    " if empty so we augment rather than replace it.
+    if g:cmdline_notebook_statusline && &statusline !~# 'VimCmdLineNotebookStatus'
+        if empty(&statusline)
+            let &statusline = '%<%f %h%m%r%=%-14.(%l,%c%V%) %P'
+        endif
+        let &statusline .= '%{VimCmdLineNotebookStatus()}'
+    endif
 endif

@@ -13,6 +13,7 @@ cmdline_notebook_max_lines	vimcmdline.txt	/*cmdline_notebook_max_lines*
 cmdline_notebook_plotty	vimcmdline.txt	/*cmdline_notebook_plotty*
 cmdline_notebook_python	vimcmdline.txt	/*cmdline_notebook_python*
 cmdline_notebook_startup_code	vimcmdline.txt	/*cmdline_notebook_startup_code*
+cmdline_notebook_statusline	vimcmdline.txt	/*cmdline_notebook_statusline*
 cmdline_outhl	vimcmdline.txt	/*cmdline_outhl*
 cmdline_split_topleft	vimcmdline.txt	/*cmdline_split_topleft*
 cmdline_term_height	vimcmdline.txt	/*cmdline_term_height*
