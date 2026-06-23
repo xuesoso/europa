@@ -587,12 +587,37 @@ endif
 " gate below is false, none of the commands/functions/highlights are defined
 " and the inert get(b:, 'cmdline_notebook', 0) guards keep classic behavior.
 if has('nvim') && g:cmdline_notebook_enable
-    hi default link CmdlineNotebookStdout Normal
-    hi default link CmdlineNotebookStderr WarningMsg
-    hi default link CmdlineNotebookError  ErrorMsg
-    hi default link CmdlineNotebookResult Identifier
-    hi default link CmdlineNotebookPrompt Comment
-    hi default link CmdlineNotebookBorder Comment
+    " Notebook output highlight groups. The content groups are overridable
+    " links; the border defaults to dark blue but can be set with
+    " g:cmdline_notebook_border_color (a #rrggbb hex, a cterm color number, or
+    " a full :highlight argument string). Re-applied on ColorScheme because
+    " :colorscheme clears highlight groups.
+    function! s:CmdLineNotebookHl()
+        hi default link CmdlineNotebookStdout Normal
+        hi default link CmdlineNotebookStderr WarningMsg
+        hi default link CmdlineNotebookError  ErrorMsg
+        hi default link CmdlineNotebookResult Identifier
+        hi default link CmdlineNotebookPrompt Comment
+        if exists('g:cmdline_notebook_border_color') && !empty(g:cmdline_notebook_border_color)
+            let l:c = g:cmdline_notebook_border_color
+            if l:c =~? '^#[a-f0-9]\{6}$'
+                exe 'hi CmdlineNotebookBorder guifg=' . l:c
+            elseif l:c =~# '^[0-9]\+$'
+                exe 'hi CmdlineNotebookBorder ctermfg=' . l:c
+            else
+                exe 'hi CmdlineNotebookBorder ' . l:c
+            endif
+        elseif &t_Co == 256
+            hi default CmdlineNotebookBorder ctermfg=25 guifg=#005faf
+        else
+            hi default CmdlineNotebookBorder ctermfg=darkblue guifg=#005faf
+        endif
+    endfunction
+    call s:CmdLineNotebookHl()
+    augroup CmdLineNotebookHl
+        autocmd!
+        autocmd ColorScheme * call s:CmdLineNotebookHl()
+    augroup END
 
     " Line range of the cell under the cursor (after the separator above to the
     " line before the next separator, or end of buffer).

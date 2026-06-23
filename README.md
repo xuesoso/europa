@@ -261,6 +261,7 @@ let cmdline_notebook_startup_code   = []       " extra Python run at kernel star
 let cmdline_notebook_max_lines      = 20       " inline output line cap per cell
 let cmdline_notebook_kernel_timeout = 30       " seconds to wait for the kernel
 let cmdline_notebook_border         = 'rounded' " output box: rounded/single/double/none
+let cmdline_notebook_border_color   = '#005faf' " border color (default dark blue)
 let cmdline_map_notebook_toggle     = '<LocalLeader>k'
 let cmdline_map_notebook_clear      = '<LocalLeader>K'
 ```
@@ -275,8 +276,19 @@ Inline output is drawn in a box, by default with a soft rounded border:
 ```
 
 Set `cmdline_notebook_border` to `'single'`, `'double'`, or `'none'` to change
-or disable it. The border uses the `CmdlineNotebookBorder` highlight group
-(linked to `Comment` by default), which you can override.
+or disable it. The border is dark blue by default; set its color with
+`cmdline_notebook_border_color`, which accepts a `#rrggbb` hex, a `cterm` color
+number, or a full `:highlight` argument string, exactly like the
+`cmdline_color_*` options:
+
+```vim
+let cmdline_notebook_border_color = '#5fafff'                  " hex (true/gui color)
+let cmdline_notebook_border_color = 39                         " cterm (256-color) number
+let cmdline_notebook_border_color = 'guifg=#5fafff gui=bold'   " full highlight spec
+```
+
+Under the hood the border uses the `CmdlineNotebookBorder` highlight group, so
+you can also style it directly (e.g. `hi link CmdlineNotebookBorder FloatBorder`).
 
 To customize plotty (e.g. its pane size), set `cmdline_notebook_plotty = 0` and
 enable it yourself via `cmdline_notebook_startup_code`, for example:
