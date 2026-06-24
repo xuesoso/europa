@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }}
+    # ubuntu-22.04 still ships setup-python builds for 3.7 (dropped on 24.04).
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Python 3.7 (EOL) through the current stable release. pip resolves the
+        # latest jupyter_client/ipykernel compatible with each interpreter.
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+
+      - name: Install Jupyter kernel deps (latest compatible)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade jupyter_client ipykernel
+          # Ensure a discoverable 'python3' kernelspec for this interpreter.
+          python -m ipykernel install --user --name python3
+
+      - name: Show resolved versions
+        run: |
+          nvim --version | head -1
+          python --version
+          python -m pip show jupyter_client ipykernel | grep -E '^(Name|Version):'
+
+      - name: Run tests
+        run: PYTHON=python NVIM=nvim bash test/run.sh

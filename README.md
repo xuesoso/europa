@@ -1,5 +1,9 @@
 # vimcmdline: Send lines to interpreter
 
+[![CI](https://github.com/xuesoso/vimcmdline/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/vimcmdline/actions/workflows/ci.yml)
+![version](https://img.shields.io/badge/version-2.0.0-blue)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+
 This plugin sends lines from either [Vim] or [Neovim] to a command line
 interpreter (REPL application). There is support for
 Clojure, Golang, Haskell, JavaScript, Julia, Jupyter, Lisp, Macaulay2, Matlab,
@@ -17,94 +21,197 @@ If running in either a Neovim built-in terminal or an external terminal, the
 plugin runs one instance of the REPL application for each file type. If
 running in a tmux pane, it runs one REPL application for Vim instance.
 
+In addition to the classic REPL transports, this fork adds an optional
+**[notebook mode](#notebook-mode-neovim--python)** (Neovim, Python) that runs
+`# %%` cells through a headless [Jupyter] kernel and renders their text output
+inline under each cell, with plots drawn by [plotty] in a tmux pane.
+
+## What's new in 2.0
+
+  - **Notebook mode** — run cells through a Jupyter kernel and see text output
+    inline, in a rounded, colorable box ([details](#notebook-mode-neovim--python)).
+  - **Code blocks / cells** — execute and navigate `# %%`-delimited cells.
+  - **`,` is now the default key prefix** (instead of `<LocalLeader>`); set
+    [`cmdline_default_keybindings`](#key-mappings) to keep the old prefix.
+
 ## How to install
 
 Either use a plugin manager such as [Vim-Plug] or copy the directories
-`ftplugin`, `plugin` and `syntax` and their files to your `~/.vim` or
-`~/.config/nvim` directory.
+`ftplugin`, `plugin` and `syntax` (and, for notebook mode, `lua` and `python`)
+and their files to your `~/.vim` or `~/.config/nvim` directory.
+
+```vim
+Plug 'xuesoso/vimcmdline'
+```
 
 ## Usage
 
 If you are editing one of the supported file types, in Normal mode do:
 
-  - `<LocalLeader>s` to start the interpreter.
+  - `,s` to start the interpreter.
 
   - `<Space>` to send the current line to the interpreter.
 
-  - `<LocalLeader><Space>` to send the current line to the interpreter and keep the cursor on the current line.
+  - `,<Space>` to send the current line and keep the cursor on the current line.
 
-  - `<LocalLeader>q` to send the quit command to the interpreter.
+  - `,q` to send the quit command to the interpreter.
 
 For languages that can source chunks of code:
 
-  - In Visual mode, press:
+  - In Visual mode, press `<Space>` to send the selection.
 
-    - `<Space>` to send a selection of text to the interpreter.
+  - In Normal mode, press:
 
-  - And, in Normal mode, press:
+    - `,p` to send from the current line to the end of the paragraph.
 
-    - `<LocalLeader>p` to send from the line to the end of paragraph.
+    - `,b` to send the block of code between the two closest marks.
 
-    - `<LocalLeader>b` to send block of code between the two closest marks.
+    - `,f` to send the entire file to the interpreter.
 
-    - `<LocalLeader>f` to send the entire file to the interpreter.
+> The default key prefix is `,`. To use the original `<LocalLeader>` prefix
+> instead, set `let cmdline_default_keybindings = 1` (see [Key mappings](#key-mappings)).
+> Every individual mapping can also be remapped — see the options below.
 
 ### Code blocks (cells)
 
 Files can be divided into code blocks (also called "cells") delimited by a
 separator line, by default `# %%`, matching the convention used by Jupyter and
-VSCode. The separator is set with `cmdline_block_sep` (see Options). For
-languages that can source chunks of code, the following Normal-mode mappings
-operate on these blocks:
+VSCode (a markdown cell is just `# %% [markdown]`). The separator is set with
+`cmdline_block_sep`. For languages that can source chunks of code, the
+following Normal-mode mappings operate on these blocks:
 
-  - `<LocalLeader>c` to execute the current code block.
+  - `,c` to execute the current code block.
 
-  - `<LocalLeader>n` to execute the current code block and jump to the next one.
+  - `,n` to execute the current code block and jump to the next one.
 
-  - `<LocalLeader>e` to execute from the current line to the end of the block.
+  - `,e` to execute from the current line to the end of the block.
 
-  - `<LocalLeader>]` to jump to the next block.
+  - `,]` to jump to the next block.
 
-  - `<LocalLeader>[` to jump to the previous block.
+  - `,[` to jump to the previous block.
+
+## Notebook mode (Neovim & Python)
+
+Notebook mode is an optional, toggleable alternative to the REPL transports. In
+this mode the code in a buffer is treated like the cells of a Jupyter notebook:
+each cell is run by a **headless [Jupyter] kernel** and its **text output is
+shown inline, directly under the cell** in a rounded box, instead of in a
+separate terminal:
+
+```
+╭─────────────╮
+│ hello world │
+│ 42          │
+╰─────────────╯
+```
+
+Plots and other images are rendered by **[plotty]** in its own tmux pane
+(sixel/kitty, works over SSH), so vimcmdline stays a terminal-only program and
+never draws images itself. The mode is off by default, is Neovim-only and (for
+now) Python-only, and does not change any existing behavior.
+
+### Requirements
+
+| Component | Status | Install |
+|---|---|---|
+| Neovim ≥ 0.10 | required | — |
+| [`jupyter_client`] + [`ipykernel`] (a **Jupyter kernel**) | **required** | `pip install jupyter_client ipykernel` |
+| [plotty] (terminal image display) | **optional** | `pip install plotty` (needs `tmux` ≥ 3.4 + a sixel/kitty terminal) |
+
+The Jupyter kernel is what executes your code and returns structured output.
+plotty is only needed if you want plots rendered in the terminal — without it,
+text output still works and image output is simply skipped. Run
+`:checkhealth vimcmdline` to verify what's available.
+
+### Enabling and using it
+
+Opt in once in your `vimrc`:
+
+```vim
+let cmdline_notebook_enable = 1
+" Optional: point at the Python that has jupyter_client / ipykernel / plotty
+let cmdline_notebook_python = 'python3'
+```
+
+Then, in a Python buffer:
+
+  - `,k` toggles notebook mode on/off (starts/stops the kernel). The statusline
+    shows ` ⏳ kernel` while starting and ` ● kernel` once ready.
+
+While notebook mode is on, the cell and send mappings run through the kernel
+and render output inline instead of to a REPL:
+
+  - `,c` run the current cell, `,n` run it and jump to the next, `,e` run to the
+    end of the cell.
+  - `<Space>` / visual `<Space>` / `,p` / `,b` / `,f` also run through the kernel.
+  - `,K` clears the output under the current cell.
+
+Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
+`:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
+`:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
+`:CmdLineNotebookOpenOutput` (opens long/truncated output in a scratch split).
 
 ## Options
 
-Below are examples of how to set the options in your `vimrc`:
+Set these variables in your `vimrc`. All are optional; defaults are shown.
+
+### Key mappings
+
+`,` is the default prefix for all `<LocalLeader>`-style actions (`<Space>` for
+sending lines is unchanged).
+
+| Variable | Default | Action |
+|---|---|---|
+| `cmdline_default_keybindings` | `0` | When `1`, use the original `<LocalLeader>` prefix instead of `,` |
+| `cmdline_map_start` | `,s` | Start the interpreter |
+| `cmdline_map_send` | `<Space>` | Send the current line (and move down) / send the visual selection |
+| `cmdline_map_send_and_stay` | `,<Space>` | Send the current line, keep the cursor |
+| `cmdline_map_source_fun` | `,f` | Send the whole file |
+| `cmdline_map_send_paragraph` | `,p` | Send to the end of the paragraph |
+| `cmdline_map_send_block` | `,b` | Send the block between the two closest marks |
+| `cmdline_map_quit` | `,q` | Send the quit command |
+| `cmdline_map_exec_block` | `,c` | Execute the current cell |
+| `cmdline_map_exec_block_and_jump` | `,n` | Execute the current cell, jump to the next |
+| `cmdline_map_exec_to_end` | `,e` | Execute from the cursor to the end of the cell |
+| `cmdline_map_next_block` | `,]` | Jump to the next cell |
+| `cmdline_map_prev_block` | `,[` | Jump to the previous cell |
+| `cmdline_map_notebook_toggle` | `,k` | Toggle notebook mode |
+| `cmdline_map_notebook_clear` | `,K` | Clear the current cell's output (notebook mode) |
 
 ```vim
-" vimcmdline mappings
-let cmdline_map_start          = '<LocalLeader>s'
-let cmdline_map_send           = '<Space>'
-let cmdline_map_send_and_stay  = '<LocalLeader><Space>'
-let cmdline_map_source_fun     = '<LocalLeader>f'
-let cmdline_map_send_paragraph = '<LocalLeader>p'
-let cmdline_map_send_block     = '<LocalLeader>b'
-let cmdline_map_quit           = '<LocalLeader>q'
+" Example: keep the original <LocalLeader> bindings, but remap one action
+let cmdline_default_keybindings = 1
+let cmdline_map_exec_block      = '<F5>'
+```
 
-" vimcmdline code-block (cell) mappings
-let cmdline_map_exec_block          = '<LocalLeader>c'
-let cmdline_map_exec_block_and_jump = '<LocalLeader>n'
-let cmdline_map_exec_to_end         = '<LocalLeader>e'
-let cmdline_map_next_block          = '<LocalLeader>]'
-let cmdline_map_prev_block          = '<LocalLeader>['
+### General options
 
-" vimcmdline options
-let cmdline_vsplit      = 1      " Split the window vertically
-let cmdline_split_topleft   = 1  " Split the window vertically and place it on the top left
-let cmdline_esc_term    = 1      " Remap <Esc> to :stopinsert in Neovim's terminal
-let cmdline_in_buffer   = 1      " Start the interpreter in a Neovim's terminal
-let cmdline_term_height = 15     " Initial height of interpreter window or pane
-let cmdline_term_width  = 80     " Initial width of interpreter window or pane
-let cmdline_tmp_dir     = '/tmp' " Temporary directory to save files
-let cmdline_outhl       = 1      " Syntax highlight the output
-let cmdline_auto_scroll = 1      " Keep the cursor at the end of terminal (nvim)
+| Variable | Default | Description |
+|---|---|---|
+| `cmdline_vsplit` | `0` | Split the interpreter window vertically |
+| `cmdline_split_topleft` | `0` | Place the vertical split on the top left |
+| `cmdline_esc_term` | `1` | Remap `<Esc>` to `:stopinsert` in Neovim's terminal |
+| `cmdline_in_buffer` | `1` (Neovim) | Run the interpreter in a Neovim terminal buffer (else tmux) |
+| `cmdline_term_height` | `15` | Initial height of the interpreter window/pane |
+| `cmdline_term_width` | `40` | Initial width of the interpreter window/pane |
+| `cmdline_tmp_dir` | `/tmp/cmdline_<time>_<user>` | Temp directory for files sourced by the interpreter |
+| `cmdline_outhl` | `1` | Syntax-highlight the interpreter output (Neovim) |
+| `cmdline_auto_scroll` | `1` | Keep the cursor at the end of the terminal (Neovim) |
+| `cmdline_block_sep` | `'# %%'` | Separator line delimiting code blocks/cells |
+| `cmdline_app` | _(unset)_ | Dict mapping filetype → interpreter command (see below) |
+| `cmdline_external_term_cmd` | _(unset)_ | Run the interpreter in an external terminal (see below) |
+| `cmdline_follow_colorscheme` | _(unset)_ | Highlight output with your current `colorscheme` |
+| `cmdline_color_*` | _(unset)_ | Per-token output colors (see [Output colors](#output-colors)) |
+
+```vim
+let cmdline_vsplit      = 1       " Split the window vertically
+let cmdline_split_topleft = 1     " ...and place it on the top left
+let cmdline_term_width  = 80      " Initial width of the interpreter pane
 let cmdline_block_sep   = '# %%'  " Separator delimiting code blocks
 ```
 
-You can also define what application will be run as the interpreter for each
-supported file type. If you want to do this, create a dictionary called
-`cmdline_app`, and add items with the 'filetype' as key and the interpreter as
-value, as in the example below:
+You can define which application runs as the interpreter for each supported
+file type with the `cmdline_app` dictionary (filetype → command):
 
 ```vim
 let cmdline_app           = {}
@@ -113,18 +220,45 @@ let cmdline_app['ruby']   = 'pry'
 let cmdline_app['sh']     = 'bash'
 ```
 
-If you are using Neovim, you can use its syntax highlight capabilities to
-colorize the interpreter output, and you can customize the colors in your
-`vimrc` in three different ways:
+### Notebook-mode options
 
-  1. The hex code of the foreground color.
+| Variable | Default | Description |
+|---|---|---|
+| `cmdline_notebook_enable` | `0` | Master switch. When `0`, no notebook commands/maps exist and behavior is unchanged |
+| `cmdline_notebook_python` | `'python3'` | Python executable that runs the kernel bridge (needs `jupyter_client` + `ipykernel`) |
+| `cmdline_notebook_kernel_name` | `'python3'` | Jupyter kernelspec name to launch |
+| `cmdline_notebook_plotty` | `1` | Run `import plotty; plotty.enable()` at kernel start (skipped if plotty is absent) |
+| `cmdline_notebook_startup_code` | `[]` | Extra Python lines run once at kernel start |
+| `cmdline_notebook_max_lines` | `20` | Inline output line cap per cell (`:CmdLineNotebookOpenOutput` shows the rest) |
+| `cmdline_notebook_kernel_timeout` | `30` | Seconds to wait for the kernel to become ready |
+| `cmdline_notebook_border` | `'rounded'` | Output box border: `rounded`, `single`, `double`, or `none` |
+| `cmdline_notebook_border_color` | `'#005faf'` | Border color: `#rrggbb` hex, a cterm number, or a full `:highlight` spec (default dark blue) |
+| `cmdline_notebook_statusline` | `1` | Append a kernel-status segment to `'statusline'` |
 
-  2. The ANSI number of the foreground color.
+```vim
+let cmdline_notebook_enable       = 1
+let cmdline_notebook_border       = 'rounded'
+let cmdline_notebook_border_color = '#5fafff'      " or 39, or 'guifg=#5fafff gui=bold'
+```
 
-  3. The complete highlighting specification.
+The border uses the `CmdlineNotebookBorder` highlight group, so you can also
+style it directly (e.g. `hi link CmdlineNotebookBorder FloatBorder`). To
+customize plotty (e.g. its pane size), disable the auto-enable and do it via
+the startup hook:
 
-The example of customization below will work if either your editor supports
-true colors or if it supports 256 colors (see in Neovim `:h tui-colors`):
+```vim
+let cmdline_notebook_plotty       = 0
+let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
+```
+
+If `cmdline_notebook_statusline` is `0`, place the status segment yourself with
+the `VimCmdLineNotebookStatus()` function in your statusline.
+
+### Output colors
+
+If you are using Neovim, you can colorize the interpreter output. Each
+`cmdline_color_*` option accepts (1) a hex foreground color, (2) an ANSI/cterm
+number, or (3) a complete highlighting specification.
 
 ```vim
 if has('gui_running') || &termguicolors
@@ -149,165 +283,46 @@ if has('gui_running') || &termguicolors
 elseif &t_Co == 256
     let cmdline_color_input    = 247
     let cmdline_color_normal   =  39
-    let cmdline_color_number   =  51
-    let cmdline_color_integer  =  51
-    let cmdline_color_float    =  51
-    let cmdline_color_complex  =  51
-    let cmdline_color_negnum   = 183
-    let cmdline_color_negfloat = 183
-    let cmdline_color_date     =  43
-    let cmdline_color_true     =  78
-    let cmdline_color_false    = 203
-    let cmdline_color_inf      =  39
-    let cmdline_color_constant =  75
-    let cmdline_color_string   =  79
-    let cmdline_color_stderr   =  33
-    let cmdline_color_error    =  15
-    let cmdline_color_warn     =   1
-    let cmdline_color_index    = 186
+    " ... (cterm numbers for the same set of options)
 endif
 ```
 
-And the next example sets the value of an option as the complete highlighting
-specification.
+A value can also be a complete highlighting specification:
 
 ```vim
 let cmdline_color_error = 'ctermfg=1 ctermbg=15 guifg=#c00000 guibg=#ffffff gui=underline term=underline'
 ```
 
-If you prefer that the output is highlighted using your current `colorscheme`,
-put in your `vimrc`:
+Or follow your current `colorscheme`:
 
 ```vim
 let cmdline_follow_colorscheme = 1
 ```
 
-Finally, if you want to run the interpreter in an external terminal emulator,
-you have to define the command to run it, as in the examples below:
+### External terminal
+
+To run the interpreter in an external terminal emulator, define the command to
+run it (`%s` is replaced with the tmux command that runs the REPL):
 
 ```vim
 let cmdline_external_term_cmd = "gnome-terminal -e '%s'"
 let cmdline_external_term_cmd = "xterm -e '%s' &"
 ```
 
-where `%s` will be replaced with the terminal command required to run the REPL
-application in a tmux session. Note that `gnome-terminal` does not require an
-`&` at the end of the command because it forks immediately after startup.
+`gnome-terminal` does not require an `&` at the end because it forks
+immediately after startup.
 
-Your `~/.inputrc` should not include `set keymap vi` because it would cause
-some applications to start in vi's edit mode. Then, you would always have to
-press either `a` or `i` in the interpreter console before using it.
-
-## Notebook mode (Neovim, Python)
-
-Notebook mode is an optional, toggleable alternative to the REPL transports. In
-this mode the code in a buffer is treated like the cells of a Jupyter notebook:
-each cell is run by a headless Jupyter (`ipykernel`) kernel and its **text
-output is shown inline, directly under the cell**, instead of in a separate
-terminal. Plots and other images are rendered by
-[plotty](https://github.com/xuesoso/plotty) in its own tmux pane (sixel/kitty,
-works over SSH), so vimcmdline stays a terminal-only program and never draws
-images itself.
-
-The mode is off by default and does not change any existing behavior. It is
-Neovim-only and, for now, Python-only.
-
-### Requirements
-
-  - Neovim 0.10 or newer.
-  - The interpreter's Python must have `jupyter_client` and `ipykernel`:
-    `pip install jupyter_client ipykernel`.
-  - For inline plots: `pip install plotty`, and run Neovim inside `tmux` (≥ 3.4)
-    in a sixel- or kitty-capable terminal. See plotty's documentation.
-
-Run `:checkhealth vimcmdline` to verify the prerequisites.
-
-### Enabling and using it
-
-Opt in once in your `vimrc`:
-
-```vim
-let cmdline_notebook_enable = 1
-" Optional: point at the Python that has jupyter_client/ipykernel/plotty
-let cmdline_notebook_python  = 'python3'
-```
-
-Then, in a supported buffer:
-
-  - `<LocalLeader>k` toggles notebook mode on/off (starts/stops the kernel).
-
-While notebook mode is on, the existing cell mappings send to the kernel and
-render output inline instead of to a REPL:
-
-  - `<LocalLeader>c` run the current cell, `<LocalLeader>n` run it and jump to
-    the next, `<LocalLeader>e` run to the end of the cell.
-  - `<Space>` / visual `<Space>` / `<LocalLeader>p` / `<LocalLeader>b` /
-    `<LocalLeader>f` also run through the kernel.
-  - `<LocalLeader>K` clears the output under the current cell.
-
-Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
-`:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
-`:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`,
-`:CmdLineNotebookOpenOutput` (opens long/truncated output in a scratch split).
-
-### Options
-
-```vim
-let cmdline_notebook_enable         = 1        " master switch (default 0)
-let cmdline_notebook_python         = 'python3' " python with the kernel deps
-let cmdline_notebook_kernel_name    = 'python3' " jupyter kernelspec name
-let cmdline_notebook_plotty         = 1        " import plotty; plotty.enable()
-let cmdline_notebook_startup_code   = []       " extra Python run at kernel start
-let cmdline_notebook_max_lines      = 20       " inline output line cap per cell
-let cmdline_notebook_kernel_timeout = 30       " seconds to wait for the kernel
-let cmdline_notebook_border         = 'rounded' " output box: rounded/single/double/none
-let cmdline_notebook_border_color   = '#005faf' " border color (default dark blue)
-let cmdline_notebook_statusline     = 1        " show kernel status in the statusline
-let cmdline_map_notebook_toggle     = '<LocalLeader>k'
-let cmdline_map_notebook_clear      = '<LocalLeader>K'
-```
-
-Inline output is drawn in a box, by default with a soft rounded border:
-
-```
-╭─────────────╮
-│ hello world │
-│ 42          │
-╰─────────────╯
-```
-
-Set `cmdline_notebook_border` to `'single'`, `'double'`, or `'none'` to change
-or disable it. The border is dark blue by default; set its color with
-`cmdline_notebook_border_color`, which accepts a `#rrggbb` hex, a `cterm` color
-number, or a full `:highlight` argument string, exactly like the
-`cmdline_color_*` options:
-
-```vim
-let cmdline_notebook_border_color = '#5fafff'                  " hex (true/gui color)
-let cmdline_notebook_border_color = 39                         " cterm (256-color) number
-let cmdline_notebook_border_color = 'guifg=#5fafff gui=bold'   " full highlight spec
-```
-
-Under the hood the border uses the `CmdlineNotebookBorder` highlight group, so
-you can also style it directly (e.g. `hi link CmdlineNotebookBorder FloatBorder`).
-
-To customize plotty (e.g. its pane size), set `cmdline_notebook_plotty = 0` and
-enable it yourself via `cmdline_notebook_startup_code`, for example:
-
-```vim
-let cmdline_notebook_plotty       = 0
-let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
-```
+Your `~/.inputrc` should not include `set keymap vi`, because it would cause
+some applications to start in vi's edit mode (you would then have to press `a`
+or `i` in the interpreter console before using it).
 
 ## How to add support for a new language
 
   1. Look at the Vim scripts in the `ftplugin` directory and make a copy of
-     the script supporting the language closer to the language that you want
-     to support.
+     the script supporting the language closest to the one you want to support.
 
-  2. Save the new script with the name "filetype\_cmdline.vim" where
-     "filetype" is the output of `echo &filetype` when you are editing a
-     script of the language that you want to support.
+  2. Save the new script as "filetype\_cmdline.vim" where "filetype" is the
+     output of `echo &filetype` when editing a script of that language.
 
   3. Edit the new script and change the values of its variables as necessary.
 
@@ -315,18 +330,31 @@ let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
      or Neovim and using either the built-in terminal or a Tmux split pane.
 
   5. Look at the Vim scripts in the `syntax` directory and make a copy of the
-     script supporting the language whose output is closer to the output of
+     script supporting the language whose output is closest to the output of
      the language that you want to support.
 
-  6. Save the new script with the name "cmdlineoutput\_app.vim" where "app" is
-     the name of the interpreter. For example, for the "matlab" file-type, the
-     interpreter is "octave".
+  6. Save the new script as "cmdlineoutput\_app.vim" where "app" is the name of
+     the interpreter (for the "matlab" file-type the interpreter is "octave").
 
   7. Edit the new script and change both the pattern used to recognize the
      input line and the pattern used to recognize errors.
 
   8. Test your new syntax highlighting script by running your application in a
      Neovim built-in terminal.
+
+## Development
+
+Run the test suite (off-path Vimscript checks, code-block unit tests, and a
+Jupyter-kernel round-trip):
+
+```sh
+bash test/run.sh                          # uses python3 + nvim on PATH
+PYTHON=/path/to/python NVIM=nvim bash test/run.sh
+```
+
+The kernel round-trip is skipped automatically if `jupyter_client`/`ipykernel`
+are not installed. CI runs the suite across Python 3.7 → current with the
+latest compatible Jupyter kernel for each version.
 
 ## See also
 
@@ -338,3 +366,7 @@ Plugins with similar functionality are [neoterm], [vim-slime] and [repl.nvim].
 [Vim-Plug]: https://github.com/junegunn/vim-plug
 [vim-slime]: https://github.com/jpalardy/vim-slime
 [repl.nvim]: https://gitlab.com/HiPhish/repl.nvim
+[Jupyter]: https://jupyter.org
+[plotty]: https://github.com/xuesoso/plotty
+[`jupyter_client`]: https://github.com/jupyter/jupyter_client
+[`ipykernel`]: https://github.com/ipython/ipykernel

@@ -13,12 +13,14 @@
 
 "==========================================================================
 " Author: Jakson Alves de Aquino <jalvesaq@gmail.com>
+" Version: 2.0.0
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
+let g:cmdline_version = "2.0.0"
 
 " Set option
 if has("nvim")
@@ -541,48 +543,57 @@ endfunction
 
 
 " Default mappings
+" Key-mapping prefix. By default ',' prefixes all cmdline actions. Set
+" g:cmdline_default_keybindings = 1 to use the original '<LocalLeader>' prefix.
+if get(g:, 'cmdline_default_keybindings', 0)
+    let s:p = '<LocalLeader>'
+else
+    let s:p = ','
+endif
+
 if !exists("g:cmdline_map_start")
-    let g:cmdline_map_start = "<LocalLeader>s"
+    let g:cmdline_map_start = s:p . "s"
 endif
 if !exists("g:cmdline_map_send")
     let g:cmdline_map_send = "<Space>"
 endif
 if !exists("g:cmdline_map_send_and_stay")
-    let g:cmdline_map_send_and_stay = "<LocalLeader><Space>"
+    let g:cmdline_map_send_and_stay = s:p . "<Space>"
 endif
 if !exists("g:cmdline_map_source_fun")
-    let g:cmdline_map_source_fun = "<LocalLeader>f"
+    let g:cmdline_map_source_fun = s:p . "f"
 endif
 if !exists("g:cmdline_map_send_paragraph")
-    let g:cmdline_map_send_paragraph = "<LocalLeader>p"
+    let g:cmdline_map_send_paragraph = s:p . "p"
 endif
 if !exists("g:cmdline_map_send_block")
-    let g:cmdline_map_send_block = "<LocalLeader>b"
+    let g:cmdline_map_send_block = s:p . "b"
 endif
 if !exists("g:cmdline_map_quit")
-    let g:cmdline_map_quit = "<LocalLeader>q"
+    let g:cmdline_map_quit = s:p . "q"
 endif
 if !exists("g:cmdline_map_exec_block")
-    let g:cmdline_map_exec_block = "<LocalLeader>c"
+    let g:cmdline_map_exec_block = s:p . "c"
 endif
 if !exists("g:cmdline_map_exec_block_and_jump")
-    let g:cmdline_map_exec_block_and_jump = "<LocalLeader>n"
+    let g:cmdline_map_exec_block_and_jump = s:p . "n"
 endif
 if !exists("g:cmdline_map_exec_to_end")
-    let g:cmdline_map_exec_to_end = "<LocalLeader>e"
+    let g:cmdline_map_exec_to_end = s:p . "e"
 endif
 if !exists("g:cmdline_map_next_block")
-    let g:cmdline_map_next_block = "<LocalLeader>]"
+    let g:cmdline_map_next_block = s:p . "]"
 endif
 if !exists("g:cmdline_map_prev_block")
-    let g:cmdline_map_prev_block = "<LocalLeader>["
+    let g:cmdline_map_prev_block = s:p . "["
 endif
 if !exists("g:cmdline_map_notebook_toggle")
-    let g:cmdline_map_notebook_toggle = "<LocalLeader>k"
+    let g:cmdline_map_notebook_toggle = s:p . "k"
 endif
 if !exists("g:cmdline_map_notebook_clear")
-    let g:cmdline_map_notebook_clear = "<LocalLeader>K"
+    let g:cmdline_map_notebook_clear = s:p . "K"
 endif
+unlet s:p
 
 " Notebook mode (Neovim only, opt-in via g:cmdline_notebook_enable). When the
 " gate below is false, none of the commands/functions/highlights are defined

@@ -1,6 +1,7 @@
 *vimcmdline.txt*	Send lines from Vim/Neovim to a command line interpreter
 
 Author: Jakson Alves de Aquino <jalvesaq@gmail.com>
+Version: 2.0.0
 License: GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -39,14 +40,15 @@ If you are editing one of the supported file types, in Normal mode press
 ==============================================================================
 3. Mappings						*vimcmdline_mappings*
 
-The default mappings are listed below. Each can be changed by setting the
-corresponding option (see |vimcmdline_options|).
+The default mappings are listed below. The default prefix is "," ; set
+|cmdline_default_keybindings| to 1 to use the original "<LocalLeader>" prefix.
+Each mapping can also be changed individually (see |vimcmdline_options|).
 
 Normal mode: >
-	<LocalLeader>s		Start the interpreter
+	,s			Start the interpreter
 	<Space>			Send the current line and move to the next
-	<LocalLeader><Space>	Send the current line and keep the cursor
-	<LocalLeader>q		Send the quit command to the interpreter
+	,<Space>		Send the current line and keep the cursor
+	,q			Send the quit command to the interpreter
 <
 For languages that can source chunks of code:
 
@@ -54,20 +56,20 @@ Visual mode: >
 	<Space>			Send the selected text
 <
 Normal mode: >
-	<LocalLeader>f		Send the entire file
-	<LocalLeader>p		Send from the line to the end of paragraph
-	<LocalLeader>b		Send block between the two closest marks
+	,f			Send the entire file
+	,p			Send from the line to the end of paragraph
+	,b			Send block between the two closest marks
 <
 Code-block (cell) mappings, see |vimcmdline_blocks|: >
-	<LocalLeader>c		Execute the current code block
-	<LocalLeader>n		Execute the current code block and jump to next
-	<LocalLeader>e		Execute from the current line to the block end
-	<LocalLeader>]		Jump to the next block
-	<LocalLeader>[		Jump to the previous block
+	,c			Execute the current code block
+	,n			Execute the current code block and jump to next
+	,e			Execute from the current line to the block end
+	,]			Jump to the next block
+	,[			Jump to the previous block
 <
 Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
-	<LocalLeader>k		Toggle notebook mode (start/stop the kernel)
-	<LocalLeader>K		Clear the output under the current cell
+	,k			Toggle notebook mode (start/stop the kernel)
+	,K			Clear the output under the current cell
 <
 ==============================================================================
 4. Code blocks						*vimcmdline_blocks*
@@ -88,6 +90,10 @@ begins just after that separator.
 5. Options						*vimcmdline_options*
 
 Set these variables in your |vimrc| before the plugin is loaded.
+
+							*cmdline_default_keybindings*
+cmdline_default_keybindings  When 1, use the original "<LocalLeader>" prefix
+			for the default mappings instead of ",". Default: 0.
 
 Mapping options (value is the key sequence to use): >
 	cmdline_map_start
