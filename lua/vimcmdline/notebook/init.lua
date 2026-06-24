@@ -33,17 +33,58 @@ function M.is_active(bufnr)
   return b ~= nil and b.handle ~= nil
 end
 
--- 'off' | 'starting' | 'ready', for the statusline.
+-- 'off' | 'starting' | 'ready' | 'busy', for the statusline.
 function M.status(bufnr)
   local b = buffers[resolve(bufnr)]
   if not b or not b.handle then
     return 'off'
   end
-  return b.ready and 'ready' or 'starting'
+  if not b.ready then
+    return 'starting'
+  end
+  if b.busy_visible and b.pending > 0 then
+    return 'busy'
+  end
+  return 'ready'
+end
+
+-- Number of cells in flight (the one running plus any queued at the kernel).
+function M.pending(bufnr)
+  local b = buffers[resolve(bufnr)]
+  return b and b.pending or 0
 end
 
 local function refresh_status()
   pcall(vim.cmd, 'redrawstatus!')
+end
+
+-- Track the busy state with a short debounce so cells that finish quickly do
+-- not flicker the statusline busy/idle.
+local function note_busy_change(bufnr)
+  local b = buffers[bufnr]
+  if not b then
+    return
+  end
+  if b.pending > 0 then
+    if b.busy_visible then
+      refresh_status() -- still busy, queue count changed
+    elseif not b.busy_timer then
+      b.busy_timer = true
+      vim.defer_fn(function()
+        local bb = buffers[bufnr]
+        if bb then
+          bb.busy_timer = false
+          if bb.pending > 0 then
+            bb.busy_visible = true
+            refresh_status()
+          end
+        end
+      end, 150)
+    end
+  elseif b.busy_visible then
+    b.busy_visible = false
+    refresh_status()
+  end
 end
 
 local function setup_autocmds(bufnr)
@@ -71,7 +112,8 @@ function M.start(bufnr)
     set_flag(bufnr, 0)
     return false
   end
-  local b = { ready = false, queue = {}, cell_seq = 0, cfg = cfg }
+  local b = { ready = false, queue = {}, cell_seq = 0, cfg = cfg,
+              pending = 0, busy_visible = false, busy_timer = false }
   buffers[bufnr] = b
   local handle, serr = bridge.spawn(
     cfg.python,
@@ -121,9 +163,12 @@ function M.restart(bufnr)
   end
   b.ready = false
   b.queue = {}
+  b.pending = 0
+  b.busy_visible = false
   render.clear_all(bufnr)
   b.handle.send({ type = 'restart' })
   notify('restarting kernel…')
+  refresh_status()
 end
 
 function M.interrupt(bufnr)
@@ -154,6 +199,8 @@ function M.execute_cell(bufnr, end_line, lines)
   else
     table.insert(b.queue, req)
   end
+  b.pending = b.pending + 1
+  note_busy_change(bufnr)
 end
 
 function M._flush_queue(bufnr)
@@ -205,6 +252,8 @@ function M._on_event(bufnr, ev)
     end
   elseif t == 'execute_reply' then
     render.finish(bufnr, ev.cell_id)
+    b.pending = math.max(b.pending - 1, 0)
+    note_busy_change(bufnr)
   elseif t == 'bridge_error' then
     if ev.fatal then
       notify(ev.message or 'kernel error', vim.log.levels.ERROR)

@@ -250,8 +250,9 @@ let cmdline_notebook_plotty       = 0
 let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
 ```
 
-The status segment (` ⏳ kernel` while starting, ` ● kernel` once ready) works
-with a plain `'statusline'` and with **vim-airline** automatically — it is added
+The status segment (` ⏳ kernel` starting, ` ● kernel` ready, ` ⟳ running +N`
+while executing, where `N` is the number of cells queued behind the running one)
+works with a plain `'statusline'` and with **vim-airline** automatically — it is added
 to `airline_section_x` by default, configurable with
 `cmdline_notebook_airline_section`. For a Lua statusline such as lualine, add a
 component that calls `vim.fn.VimCmdLineNotebookStatus()` (or

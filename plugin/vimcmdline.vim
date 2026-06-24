@@ -688,7 +688,15 @@ if has('nvim') && g:cmdline_notebook_enable
             return ''
         endif
         let l:s = luaeval("require('vimcmdline.notebook').status(_A)", bufnr('%'))
-        return l:s ==# 'ready' ? ' ● kernel' : l:s ==# 'starting' ? ' ⏳ kernel' : ''
+        if l:s ==# 'ready'
+            return '  ● kernel'
+        elseif l:s ==# 'starting'
+            return '  ⏳ kernel'
+        elseif l:s ==# 'busy'
+            let l:n = luaeval("require('vimcmdline.notebook').pending(_A)", bufnr('%'))
+            return l:n > 1 ? printf('  ⟳ running +%d', l:n - 1) : '  ⟳ running'
+        endif
+        return ''
     endfunction
 
     " Add the segment to the statusline (default on). A statusline manager such
