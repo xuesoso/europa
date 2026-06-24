@@ -28,10 +28,8 @@ Matlab, Prolog, Python, Ruby, Sage, Scala, Shell script, and Swift, in either
 > Licensed GPL-2.0-or-later.
 
 The interpreter may run in a Neovim built-in terminal, an external terminal
-emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output,
-as below (different colors for general output, numbers, and the prompt):
-
-![nvim running octave](https://cloud.githubusercontent.com/assets/891655/7090493/5fba2426-df71-11e4-8eb8-f17668d9361a.png)
+emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output
+(different colors for general output, numbers, and the prompt).
 
 ## Highlights
 
