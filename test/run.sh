@@ -22,6 +22,9 @@ echo "== off-path: notebook enabled but not toggled =="
 echo "== code-block unit behaviour (regression) =="
 "$NVIM" --headless -u NONE -N -S test/codeblock.vim || rc=1
 
+echo "== notebook render: re-run replaces output (regression) =="
+"$NVIM" --headless -u NONE -N -l test/render.lua || rc=1
+
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1
 

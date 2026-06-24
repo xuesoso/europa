@@ -172,6 +172,14 @@ end
 function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border)
   local s = bstate(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
+  -- Drop stored output for any earlier run whose range overlaps this one, so
+  -- re-running a cell REPLACES its output instead of leaving a stale run that
+  -- find_cell() could return (and so cell state does not grow unbounded).
+  for id, c in pairs(s.cells) do
+    if c.start_line <= end_line and c.end_line >= start_line then
+      s.cells[id] = nil
+    end
+  end
   s.cells[cell_id] = {
     end_line = end_line,
     start_line = start_line,
@@ -231,12 +239,16 @@ local function find_cell(bufnr, start_line, end_line)
   if not s then
     return nil
   end
-  for _, c in pairs(s.cells) do
+  -- Return the most recent (highest cell_id) run whose anchor is in range.
+  local best, best_id
+  for id, c in pairs(s.cells) do
     if c.end_line >= start_line and c.end_line <= end_line then
-      return c
+      if not best_id or id > best_id then
+        best, best_id = c, id
+      end
     end
   end
-  return nil
+  return best
 end
 
 -- Full (untruncated) output text for the cell in a line range, as a list.
