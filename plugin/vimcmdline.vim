@@ -53,6 +53,7 @@ let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
 let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
+let g:cmdline_notebook_airline_section = get(g:, 'cmdline_notebook_airline_section', 'x')
 
 " Internal variables
 let g:cmdline_job = {}
@@ -690,12 +691,29 @@ if has('nvim') && g:cmdline_notebook_enable
         return l:s ==# 'ready' ? ' ● kernel' : l:s ==# 'starting' ? ' ⏳ kernel' : ''
     endfunction
 
-    " Add it to the statusline (default on). Seed the standard statusline first
-    " if empty so we augment rather than replace it.
-    if g:cmdline_notebook_statusline && &statusline !~# 'VimCmdLineNotebookStatus'
-        if empty(&statusline)
-            let &statusline = '%<%f %h%m%r%=%-14.(%l,%c%V%) %P'
+    " Add the segment to the statusline (default on). A statusline manager such
+    " as vim-airline owns &statusline and overwrites it, so we also register an
+    " airline section below; the plain &statusline append covers everyone else.
+    if g:cmdline_notebook_statusline
+        if &statusline !~# 'VimCmdLineNotebookStatus'
+            if empty(&statusline)
+                let &statusline = '%<%f %h%m%r%=%-14.(%l,%c%V%) %P'
+            endif
+            let &statusline .= '%{VimCmdLineNotebookStatus()}'
         endif
-        let &statusline .= '%{VimCmdLineNotebookStatus()}'
+
+        " vim-airline: append the segment to a section on every (re)init,
+        " idempotently (airline rebuilds the section, so re-add when missing).
+        function! s:CmdLineAirlineInit() abort
+            let l:var = 'airline_section_' . get(g:, 'cmdline_notebook_airline_section', 'x')
+            let l:seg = '%{VimCmdLineNotebookStatus()}'
+            if stridx(get(g:, l:var, ''), l:seg) < 0
+                let g:{l:var} = get(g:, l:var, '') . l:seg
+            endif
+        endfunction
+        augroup CmdLineAirline
+            autocmd!
+            autocmd User AirlineAfterInit call s:CmdLineAirlineInit()
+        augroup END
     endif
 endif

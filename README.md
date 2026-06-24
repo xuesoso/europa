@@ -231,7 +231,8 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_kernel_timeout` | `30` | Seconds to wait for the kernel to become ready |
 | `cmdline_notebook_border` | `'rounded'` | Output box border: `rounded`, `single`, `double`, or `none` |
 | `cmdline_notebook_border_color` | `'#005faf'` | Border color: `#rrggbb` hex, a cterm number, or a full `:highlight` spec (default dark blue) |
-| `cmdline_notebook_statusline` | `1` | Append a kernel-status segment to `'statusline'` |
+| `cmdline_notebook_statusline` | `1` | Show a kernel-status segment in `'statusline'` and in vim-airline |
+| `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 
 ```vim
 let cmdline_notebook_enable       = 1
@@ -249,8 +250,13 @@ let cmdline_notebook_plotty       = 0
 let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
 ```
 
-If `cmdline_notebook_statusline` is `0`, place the status segment yourself with
-the `VimCmdLineNotebookStatus()` function in your statusline.
+The status segment (` ⏳ kernel` while starting, ` ● kernel` once ready) works
+with a plain `'statusline'` and with **vim-airline** automatically — it is added
+to `airline_section_x` by default, configurable with
+`cmdline_notebook_airline_section`. For a Lua statusline such as lualine, add a
+component that calls `vim.fn.VimCmdLineNotebookStatus()` (or
+`require('vimcmdline.notebook').status(0)`). Set `cmdline_notebook_statusline = 0`
+to place the `VimCmdLineNotebookStatus()` segment entirely yourself.
 
 ### Output colors
 

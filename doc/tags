@@ -5,6 +5,7 @@ cmdline_default_keybindings	europa.txt	/*cmdline_default_keybindings*
 cmdline_esc_term	europa.txt	/*cmdline_esc_term*
 cmdline_external_term_cmd	europa.txt	/*cmdline_external_term_cmd*
 cmdline_in_buffer	europa.txt	/*cmdline_in_buffer*
+cmdline_notebook_airline_section	europa.txt	/*cmdline_notebook_airline_section*
 cmdline_notebook_border	europa.txt	/*cmdline_notebook_border*
 cmdline_notebook_border_color	europa.txt	/*cmdline_notebook_border_color*
 cmdline_notebook_enable	europa.txt	/*cmdline_notebook_enable*

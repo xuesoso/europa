@@ -268,10 +268,16 @@ cmdline_notebook_border_color  Color of the output border. Accepts a #rrggbb
 			Defaults to dark blue (#005faf / cterm 25).
 
 							*cmdline_notebook_statusline*
-cmdline_notebook_statusline  When 1 (default), append a kernel-status segment
-			to 'statusline' (" ⏳ kernel" while starting, " ● kernel"
-			when ready, empty otherwise). Set to 0 to manage it
-			yourself with the VimCmdLineNotebookStatus() function.
+cmdline_notebook_statusline  When 1 (default), show a kernel-status segment
+			(" ⏳ kernel" while starting, " ● kernel" when ready,
+			empty otherwise) in 'statusline' and, when present, in
+			vim-airline. Set to 0 to place the
+			VimCmdLineNotebookStatus() segment yourself. For lualine,
+			use a component calling VimCmdLineNotebookStatus().
+
+							*cmdline_notebook_airline_section*
+cmdline_notebook_airline_section  vim-airline section the kernel status is added
+			to (a letter 'a'..'z'). Default: 'x'.
 
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*
