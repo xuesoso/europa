@@ -1,47 +1,55 @@
-# vimcmdline: Send lines to interpreter
+# europa
 
-[![CI](https://github.com/xuesoso/vimcmdline/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/vimcmdline/actions/workflows/ci.yml)
+[![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
 ![version](https://img.shields.io/badge/version-2.0.0-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
-This plugin sends lines from either [Vim] or [Neovim] to a command line
-interpreter (REPL application). There is support for
-Clojure, Golang, Haskell, JavaScript, Julia, Jupyter, Lisp, Macaulay2, Matlab,
-Prolog, Python, Ruby, Sage, Scala, Shell script, and Swift
-(see [Nvim-R](https://github.com/jalvesaq/Nvim-R) for R support on
-Vim/Neovim). The interpreter may run in a Neovim built-in terminal (Neovim
-buffer), an external terminal emulator or in a tmux pane. The main advantage
-of running the interpreter in a Neovim terminal is that the output is
-colorized, as in the screenshot below, where we have different colors for
-general output, positive and negative numbers, and the prompt line:
+**europa** runs your code like a Jupyter notebook inside Neovim: split a file
+into `# %%` cells, run them through a headless [Jupyter] kernel, and see each
+cell's text output rendered **inline, directly under the cell**:
+
+```
+╭─────────────╮
+│ hello world │
+│ 42          │
+╰─────────────╯
+```
+
+Plots and other images are drawn in the terminal by **[plotty]** (sixel/kitty,
+works over SSH) — europa itself stays terminal-only. It is built on top of
+[vimcmdline]'s REPL engine, so it is also a plain **send-to-interpreter** plugin
+for Clojure, Golang, Haskell, JavaScript, Julia, Jupyter, Lisp, Macaulay2,
+Matlab, Prolog, Python, Ruby, Sage, Scala, Shell script, and Swift, in either
+[Vim] or [Neovim].
+
+> europa is a fork of [vimcmdline] by Jakson Alves de Aquino, extended with code
+> cells, notebook mode, and a comma-prefixed keymap. It keeps vimcmdline's
+> `cmdline_*` settings and mappings, so existing configs keep working.
+> Licensed GPL-2.0-or-later.
+
+The interpreter may run in a Neovim built-in terminal, an external terminal
+emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output,
+as below (different colors for general output, numbers, and the prompt):
 
 ![nvim running octave](https://cloud.githubusercontent.com/assets/891655/7090493/5fba2426-df71-11e4-8eb8-f17668d9361a.png)
 
-If running in either a Neovim built-in terminal or an external terminal, the
-plugin runs one instance of the REPL application for each file type. If
-running in a tmux pane, it runs one REPL application for Vim instance.
-
-In addition to the classic REPL transports, this fork adds an optional
-**[notebook mode](#notebook-mode-neovim--python)** (Neovim, Python) that runs
-`# %%` cells through a headless [Jupyter] kernel and renders their text output
-inline under each cell, with plots drawn by [plotty] in a tmux pane.
-
-## What's new in 2.0
+## Highlights
 
   - **Notebook mode** — run cells through a Jupyter kernel and see text output
     inline, in a rounded, colorable box ([details](#notebook-mode-neovim--python)).
   - **Code blocks / cells** — execute and navigate `# %%`-delimited cells.
-  - **`,` is now the default key prefix** (instead of `<LocalLeader>`); set
-    [`cmdline_default_keybindings`](#key-mappings) to keep the old prefix.
+  - **Multi-language REPL** — send lines/paragraphs/files to 18 interpreters.
+  - **`,` key prefix** by default; set [`cmdline_default_keybindings`](#key-mappings)
+    to keep the original `<LocalLeader>` prefix.
 
 ## How to install
 
-Either use a plugin manager such as [Vim-Plug] or copy the directories
-`ftplugin`, `plugin` and `syntax` (and, for notebook mode, `lua` and `python`)
-and their files to your `~/.vim` or `~/.config/nvim` directory.
+Use a plugin manager such as [Vim-Plug], or copy the directories `ftplugin`,
+`plugin`, and `syntax` (and, for notebook mode, `lua` and `python`) and their
+files to your `~/.vim` or `~/.config/nvim` directory.
 
 ```vim
-Plug 'xuesoso/vimcmdline'
+Plug 'xuesoso/europa'
 ```
 
 ## Usage
@@ -96,19 +104,10 @@ Notebook mode is an optional, toggleable alternative to the REPL transports. In
 this mode the code in a buffer is treated like the cells of a Jupyter notebook:
 each cell is run by a **headless [Jupyter] kernel** and its **text output is
 shown inline, directly under the cell** in a rounded box, instead of in a
-separate terminal:
-
-```
-╭─────────────╮
-│ hello world │
-│ 42          │
-╰─────────────╯
-```
-
-Plots and other images are rendered by **[plotty]** in its own tmux pane
-(sixel/kitty, works over SSH), so vimcmdline stays a terminal-only program and
-never draws images itself. The mode is off by default, is Neovim-only and (for
-now) Python-only, and does not change any existing behavior.
+separate terminal. Plots and other images are rendered by **[plotty]** in its
+own tmux pane (sixel/kitty, works over SSH). The mode is off by default, is
+Neovim-only and (for now) Python-only, and does not change any existing
+behavior.
 
 ### Requirements
 
@@ -121,7 +120,7 @@ now) Python-only, and does not change any existing behavior.
 The Jupyter kernel is what executes your code and returns structured output.
 plotty is only needed if you want plots rendered in the terminal — without it,
 text output still works and image output is simply skipped. Run
-`:checkhealth vimcmdline` to verify what's available.
+`:checkhealth europa` to verify what's available.
 
 ### Enabling and using it
 
@@ -153,7 +152,8 @@ Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 
 ## Options
 
-Set these variables in your `vimrc`. All are optional; defaults are shown.
+Set these variables in your `vimrc`. All are optional; defaults are shown. The
+settings keep the `cmdline_*` prefix for compatibility with vimcmdline configs.
 
 ### Key mappings
 
@@ -265,21 +265,10 @@ if has('gui_running') || &termguicolors
     let cmdline_color_input    = '#9e9e9e'
     let cmdline_color_normal   = '#00afff'
     let cmdline_color_number   = '#00ffff'
-    let cmdline_color_integer  = '#00ffff'
-    let cmdline_color_float    = '#00ffff'
-    let cmdline_color_complex  = '#00ffff'
-    let cmdline_color_negnum   = '#d7afff'
-    let cmdline_color_negfloat = '#d7afff'
-    let cmdline_color_date     = '#00d7af'
-    let cmdline_color_true     = '#5fd787'
-    let cmdline_color_false    = '#ff5f5f'
-    let cmdline_color_inf      = '#00afff'
-    let cmdline_color_constant = '#5fafff'
     let cmdline_color_string   = '#5fd7af'
-    let cmdline_color_stderr   = '#0087ff'
     let cmdline_color_error    = '#ff0000'
     let cmdline_color_warn     = '#c0ffff'
-    let cmdline_color_index    = '#d7d787'
+    " ... (see :help vimcmdline_colors for the full set)
 elseif &t_Co == 256
     let cmdline_color_input    = 247
     let cmdline_color_normal   =  39
@@ -287,15 +276,11 @@ elseif &t_Co == 256
 endif
 ```
 
-A value can also be a complete highlighting specification:
+A value can also be a complete highlighting specification, or you can follow
+your current `colorscheme`:
 
 ```vim
-let cmdline_color_error = 'ctermfg=1 ctermbg=15 guifg=#c00000 guibg=#ffffff gui=underline term=underline'
-```
-
-Or follow your current `colorscheme`:
-
-```vim
+let cmdline_color_error = 'ctermfg=1 ctermbg=15 guifg=#c00000 guibg=#ffffff gui=underline'
 let cmdline_follow_colorscheme = 1
 ```
 
@@ -318,29 +303,20 @@ or `i` in the interpreter console before using it).
 
 ## How to add support for a new language
 
-  1. Look at the Vim scripts in the `ftplugin` directory and make a copy of
-     the script supporting the language closest to the one you want to support.
-
-  2. Save the new script as "filetype\_cmdline.vim" where "filetype" is the
+  1. Copy the script in `ftplugin/` supporting the language closest to the one
+     you want, and save it as "filetype\_cmdline.vim" where "filetype" is the
      output of `echo &filetype` when editing a script of that language.
 
-  3. Edit the new script and change the values of its variables as necessary.
+  2. Edit the new script and change the values of its variables as necessary.
 
-  4. Test your new file-type script by running your application in either Vim
-     or Neovim and using either the built-in terminal or a Tmux split pane.
+  3. Copy the closest script in `syntax/` and save it as "cmdlineoutput\_app.vim"
+     where "app" is the interpreter name (for the "matlab" file-type the
+     interpreter is "octave").
 
-  5. Look at the Vim scripts in the `syntax` directory and make a copy of the
-     script supporting the language whose output is closest to the output of
-     the language that you want to support.
+  4. Edit the new syntax script's patterns for the input line and for errors.
 
-  6. Save the new script as "cmdlineoutput\_app.vim" where "app" is the name of
-     the interpreter (for the "matlab" file-type the interpreter is "octave").
-
-  7. Edit the new script and change both the pattern used to recognize the
-     input line and the pattern used to recognize errors.
-
-  8. Test your new syntax highlighting script by running your application in a
-     Neovim built-in terminal.
+  5. Test by running your application in a Neovim built-in terminal or a tmux
+     split pane.
 
 ## Development
 
@@ -356,15 +332,24 @@ The kernel round-trip is skipped automatically if `jupyter_client`/`ipykernel`
 are not installed. CI runs the suite across Python 3.7 → current with the
 latest compatible Jupyter kernel for each version.
 
+## Credits & license
+
+europa is maintained by **xuesoso** and is a fork of [vimcmdline] by Jakson
+Alves de Aquino, with code cells, notebook mode, and the comma-prefixed keymap
+added. Licensed under **GPL-2.0-or-later** (see [LICENSE](LICENSE)).
+
 ## See also
 
-Plugins with similar functionality are [neoterm], [vim-slime] and [repl.nvim].
+Plugins with similar functionality are [vimcmdline] (upstream), [neoterm],
+[vim-slime], [iron.nvim], and [repl.nvim].
 
+[vimcmdline]: https://github.com/jalvesaq/vimcmdline
 [neoterm]: https://github.com/kassio/neoterm
 [Vim]: http://www.vim.org
 [Neovim]: https://github.com/neovim/neovim
 [Vim-Plug]: https://github.com/junegunn/vim-plug
 [vim-slime]: https://github.com/jpalardy/vim-slime
+[iron.nvim]: https://github.com/Vigemus/iron.nvim
 [repl.nvim]: https://gitlab.com/HiPhish/repl.nvim
 [Jupyter]: https://jupyter.org
 [plotty]: https://github.com/xuesoso/plotty

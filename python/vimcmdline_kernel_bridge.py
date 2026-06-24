@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""vimcmdline notebook-mode kernel bridge.
+# europa notebook mode. Maintainer: xuesoso <xuesoso@gmail.com>.
+# Part of europa (a fork of vimcmdline). Licensed GPL-2.0-or-later.
+"""europa notebook-mode kernel bridge.
 
 Drives a headless Jupyter (ipykernel) kernel via ``jupyter_client`` and speaks
 newline-delimited JSON (NDJSON) on stdin/stdout so the Neovim Lua side can run

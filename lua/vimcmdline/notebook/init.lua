@@ -1,4 +1,5 @@
--- Public API + per-buffer kernel state for vimcmdline notebook mode.
+-- europa notebook mode: public API + per-buffer kernel state.
+-- Maintainer: xuesoso. Part of europa (a fork of vimcmdline). GPL-2.0-or-later.
 local config = require('vimcmdline.notebook.config')
 local health = require('vimcmdline.notebook.health')
 local bridge = require('vimcmdline.notebook.bridge')
@@ -10,7 +11,7 @@ local M = {}
 local buffers = {}
 
 local function notify(msg, level)
-  vim.notify('vimcmdline: ' .. msg, level or vim.log.levels.INFO)
+  vim.notify('europa: ' .. msg, level or vim.log.levels.INFO)
 end
 
 -- Resolve nil/0 ("current buffer") to a concrete buffer number so the same

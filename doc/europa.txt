@@ -1,11 +1,12 @@
-*vimcmdline.txt*	Send lines from Vim/Neovim to a command line interpreter
+*europa.txt*	Run Jupyter-notebook cells and send code to interpreters
 
-Author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-Version: 2.0.0
-License: GPL v2 or later (see plugin/vimcmdline.vim)
+Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
+Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
+Version:         2.0.0
+License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
-CONTENTS						*vimcmdline*
+CONTENTS					*europa*	*vimcmdline*
 
 	1. Overview ..................... |vimcmdline_overview|
 	2. Usage ........................ |vimcmdline_usage|
@@ -19,10 +20,15 @@ CONTENTS						*vimcmdline*
 ==============================================================================
 1. Overview						*vimcmdline_overview*
 
-vimcmdline sends lines from either Vim or Neovim to a command line interpreter
-(REPL application). There is support for Clojure, Golang, Haskell, JavaScript,
-Julia, Jupyter, Lisp, Macaulay2, Matlab, Prolog, Python, Ruby, Sage, Scala,
-Shell script, and Swift.
+europa runs your code like a Jupyter notebook inside Neovim: split a file into
+"# %%" cells, run them through a headless Jupyter kernel, and see each cell's
+text output rendered inline under the cell (see |vimcmdline-notebook|). Plots
+are drawn in the terminal by the plotty package; europa itself draws no images.
+
+europa is also a plain send-to-interpreter plugin, built on vimcmdline: it
+sends lines, paragraphs, blocks, and files from either Vim or Neovim to a REPL
+for Clojure, Golang, Haskell, JavaScript, Julia, Jupyter, Lisp, Macaulay2,
+Matlab, Prolog, Python, Ruby, Sage, Scala, Shell script, and Swift.
 
 The interpreter may run in a Neovim built-in terminal (a Neovim buffer), an
 external terminal emulator, or in a tmux pane. When running in either a Neovim
@@ -30,12 +36,16 @@ built-in terminal or an external terminal, the plugin runs one instance of the
 REPL application for each file type. When running in a tmux pane, it runs one
 REPL application per Vim instance.
 
+europa is a fork of vimcmdline; it keeps the cmdline_* settings and mappings,
+so existing vimcmdline configurations keep working.
+
 ==============================================================================
 2. Usage						*vimcmdline_usage*
 
-If you are editing one of the supported file types, in Normal mode press
-|<LocalLeader>s| to start the interpreter, then use the mappings described in
-|vimcmdline_mappings| to send code to it.
+If you are editing one of the supported file types, in Normal mode press |,s|
+to start the interpreter, then use the mappings described in
+|vimcmdline_mappings| to send code to it. For notebook mode (Python, Neovim),
+see |vimcmdline-notebook|.
 
 ==============================================================================
 3. Mappings						*vimcmdline_mappings*
@@ -191,7 +201,7 @@ plotty package (https://github.com/xuesoso/plotty) in its own tmux pane
 (sixel/kitty, works over SSH); vimcmdline never draws images itself.
 
 The mode is off by default and changes no existing behavior. Run
-:checkhealth vimcmdline to verify prerequisites.
+:checkhealth europa to verify prerequisites.
 
 Requirements:
   - Neovim 0.10+.

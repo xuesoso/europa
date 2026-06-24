@@ -12,7 +12,10 @@
 "  http://www.r-project.org/Licenses/
 
 "==========================================================================
-" Author: Jakson Alves de Aquino <jalvesaq@gmail.com>
+" europa: run Jupyter-notebook cells and send code to interpreters.
+" Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
+" A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
+" Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
 " Version: 2.0.0
 "==========================================================================
 
@@ -644,15 +647,15 @@ if has('nvim') && g:cmdline_notebook_enable
         if get(b:, 'cmdline_notebook', 0)
             let b:cmdline_notebook = 0
             call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
-            echomsg 'vimcmdline: notebook mode off'
+            echomsg 'europa: notebook mode off'
             return
         endif
         if !exists("b:cmdline_app")
-            echohl WarningMsg | echomsg 'vimcmdline: notebook mode is not supported for this filetype.' | echohl Normal
+            echohl WarningMsg | echomsg 'europa: notebook mode is not supported for this filetype.' | echohl Normal
             return
         endif
         if has_key(g:cmdline_job, b:cmdline_filetype) && g:cmdline_job[b:cmdline_filetype] != 0
-            echohl WarningMsg | echomsg 'vimcmdline: quit the running REPL (' . g:cmdline_map_quit . ') before enabling notebook mode.' | echohl Normal
+            echohl WarningMsg | echomsg 'europa: quit the running REPL (' . g:cmdline_map_quit . ') before enabling notebook mode.' | echohl Normal
             return
         endif
         let b:cmdline_notebook = 1
