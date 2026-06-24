@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.0.2-blue)
+![version](https://img.shields.io/badge/version-2.0.3-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -141,12 +141,15 @@ and render output inline instead of to a REPL:
   - `,c` run the current cell, `,n` run it and jump to the next, `,e` run to the
     end of the cell.
   - `<Space>` / visual `<Space>` / `,p` / `,b` / `,f` also run through the kernel.
-  - `,K` clears the output under the current cell.
+  - `,K` clears the output under the current cell; `,o` opens the current
+    cell's full output in a popup.
 
 Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
 `:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
-`:CmdLineNotebookOpenOutput` (opens long/truncated output in a scratch split).
+`:CmdLineNotebookOpenOutput` (opens the cell's full, untruncated output in a
+read-only floating popup — `q` or `<Esc>` closes it; use a split instead with
+`cmdline_notebook_output_win`).
 
 ## Options
 
@@ -175,6 +178,7 @@ sending lines is unchanged).
 | `cmdline_map_prev_block` | `,[` | Jump to the previous cell |
 | `cmdline_map_notebook_toggle` | `,k` | Toggle notebook mode |
 | `cmdline_map_notebook_clear` | `,K` | Clear the current cell's output (notebook mode) |
+| `cmdline_map_notebook_output` | `,o` | Open the current cell's full output in a popup (notebook mode) |
 
 ```vim
 " Example: keep the original <LocalLeader> bindings, but remap one action
@@ -233,6 +237,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_border_color` | `'#005faf'` | Border color: `#rrggbb` hex, a cterm number, or a full `:highlight` spec (default dark blue) |
 | `cmdline_notebook_statusline` | `1` | Show a kernel-status segment in `'statusline'` and in vim-airline |
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
+| `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 
 ```vim
 let cmdline_notebook_enable       = 1

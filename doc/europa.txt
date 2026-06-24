@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.0.2
+Version:         2.0.3
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -80,6 +80,7 @@ Code-block (cell) mappings, see |vimcmdline_blocks|: >
 Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
 	,k			Toggle notebook mode (start/stop the kernel)
 	,K			Clear the output under the current cell
+	,o			Open the current cell's full output in a popup
 <
 ==============================================================================
 4. Code blocks						*vimcmdline_blocks*
@@ -120,6 +121,7 @@ Mapping options (value is the key sequence to use): >
 	cmdline_map_prev_block
 	cmdline_map_notebook_toggle
 	cmdline_map_notebook_clear
+	cmdline_map_notebook_output
 <
 For notebook-mode options see |vimcmdline-notebook|.
 
@@ -225,7 +227,7 @@ Commands: >
 	:CmdLineNotebookInterrupt   interrupt the running cell
 	:CmdLineNotebookClear       clear output under the current cell
 	:CmdLineNotebookClearAll    clear all output in the buffer
-	:CmdLineNotebookOpenOutput  open the current cell's full output in a split
+	:CmdLineNotebookOpenOutput  open the current cell's full output in a popup
 <
 Options:
 							*cmdline_notebook_enable*
@@ -279,6 +281,11 @@ cmdline_notebook_statusline  When 1 (default), show a kernel-status segment in
 							*cmdline_notebook_airline_section*
 cmdline_notebook_airline_section  vim-airline section the kernel status is added
 			to (a letter 'a'..'z'). Default: 'x'.
+
+							*cmdline_notebook_output_win*
+cmdline_notebook_output_win  Window used by :CmdLineNotebookOpenOutput: 'float'
+			(a read-only centered popup; q or <Esc> closes it) or
+			'split'. Default: 'float'.
 
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*

@@ -12,6 +12,7 @@ cmdline_notebook_enable	europa.txt	/*cmdline_notebook_enable*
 cmdline_notebook_kernel_name	europa.txt	/*cmdline_notebook_kernel_name*
 cmdline_notebook_kernel_timeout	europa.txt	/*cmdline_notebook_kernel_timeout*
 cmdline_notebook_max_lines	europa.txt	/*cmdline_notebook_max_lines*
+cmdline_notebook_output_win	europa.txt	/*cmdline_notebook_output_win*
 cmdline_notebook_plotty	europa.txt	/*cmdline_notebook_plotty*
 cmdline_notebook_python	europa.txt	/*cmdline_notebook_python*
 cmdline_notebook_startup_code	europa.txt	/*cmdline_notebook_startup_code*

@@ -284,6 +284,22 @@ function M.clear_all_output(bufnr)
   render.clear_all(resolve(bufnr))
 end
 
+-- Map our border style names to nvim_open_win() border values.
+local WIN_BORDER = { rounded = 'rounded', single = 'single', double = 'double', none = 'none' }
+
+local function close_keys(obuf, win)
+  local function close()
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    else
+      pcall(vim.cmd, 'close')
+    end
+  end
+  local opts = { buffer = obuf, nowait = true, silent = true }
+  vim.keymap.set('n', 'q', close, opts)
+  vim.keymap.set('n', '<Esc>', close, opts)
+end
+
 function M.open_output(bufnr, start_line, end_line)
   bufnr = resolve(bufnr)
   local text = render.get_range_text(bufnr, start_line, end_line)
@@ -291,13 +307,45 @@ function M.open_output(bufnr, start_line, end_line)
     notify('no output for this cell')
     return
   end
-  vim.cmd('botright new')
-  local obuf = vim.api.nvim_get_current_buf()
+  local cfg = config.read()
+
+  local obuf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(obuf, 0, -1, false, text)
   vim.bo[obuf].buftype = 'nofile'
   vim.bo[obuf].bufhidden = 'wipe'
   vim.bo[obuf].swapfile = false
+  vim.bo[obuf].modifiable = false   -- read-only display
+  vim.bo[obuf].readonly = true
   pcall(vim.api.nvim_buf_set_name, obuf, 'vimcmdline-output')
+
+  if cfg.output_win == 'split' then
+    vim.cmd('botright sbuffer ' .. obuf)
+    close_keys(obuf, nil)
+    return
+  end
+
+  -- Floating popup (default), centered and sized to the content.
+  local cols, lns = vim.o.columns, vim.o.lines
+  local maxw = 0
+  for _, l in ipairs(text) do
+    maxw = math.max(maxw, vim.fn.strdisplaywidth(l))
+  end
+  local width = math.max(math.min(maxw + 2, math.floor(cols * 0.9)), 20)
+  local height = math.max(math.min(#text, math.floor(lns * 0.8)), 1)
+  local win = vim.api.nvim_open_win(obuf, true, {
+    relative = 'editor',
+    width = width,
+    height = height,
+    row = math.floor((lns - height) / 2 - 1),
+    col = math.floor((cols - width) / 2),
+    style = 'minimal',
+    border = WIN_BORDER[cfg.border] or 'rounded',
+    title = ' cell output ',
+    title_pos = 'center',
+  })
+  vim.wo[win].wrap = true
+  vim.wo[win].winhighlight = 'FloatBorder:CmdlineNotebookBorder,FloatTitle:CmdlineNotebookBorder'
+  close_keys(obuf, win)
 end
 
 return M

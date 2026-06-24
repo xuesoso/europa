@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.0.2
+" Version: 2.0.3
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.0.2"
+let g:cmdline_version = "2.0.3"
 
 " Set option
 if has("nvim")
@@ -53,6 +53,7 @@ let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
 let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
+let g:cmdline_notebook_output_win = get(g:, 'cmdline_notebook_output_win', 'float')
 let g:cmdline_notebook_airline_section = get(g:, 'cmdline_notebook_airline_section', 'x')
 
 " Internal variables
@@ -596,6 +597,9 @@ if !exists("g:cmdline_map_notebook_toggle")
 endif
 if !exists("g:cmdline_map_notebook_clear")
     let g:cmdline_map_notebook_clear = s:p . "K"
+endif
+if !exists("g:cmdline_map_notebook_output")
+    let g:cmdline_map_notebook_output = s:p . "o"
 endif
 unlet s:p
 
