@@ -192,7 +192,7 @@ function M.execute_cell(bufnr, end_line, lines)
   b.cell_seq = b.cell_seq + 1
   local cell_id = b.cell_seq
   local start_line = math.max(end_line - #lines + 1, 1)
-  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border)
+  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border, b.cfg.exec_marker)
   local req = { type = 'execute', cell_id = cell_id, code = table.concat(lines, '\n') }
   if b.ready then
     b.handle.send(req)
@@ -251,7 +251,7 @@ function M._on_event(bufnr, ev)
       render.finish(bufnr, ev.cell_id)
     end
   elseif t == 'execute_reply' then
-    render.finish(bufnr, ev.cell_id)
+    render.mark_done(bufnr, ev.cell_id, ev.execution_count, ev.status)
     b.pending = math.max(b.pending - 1, 0)
     note_busy_change(bufnr)
   elseif t == 'bridge_error' then

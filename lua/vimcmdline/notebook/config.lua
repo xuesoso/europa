@@ -25,6 +25,7 @@ function M.read()
   cfg.kernel_timeout = gget('cmdline_notebook_kernel_timeout', 30)
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
+  cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))
   if type(cfg.python) ~= 'string' or cfg.python == '' then
     cfg.python = 'python3'
   end

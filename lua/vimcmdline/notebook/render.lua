@@ -12,6 +12,7 @@ local HL = {
   error  = 'CmdlineNotebookError',
   result = 'CmdlineNotebookResult',
   info   = 'CmdlineNotebookPrompt',
+  ok     = 'CmdlineNotebookOk',
 }
 
 local function bstate(bufnr)
@@ -72,27 +73,64 @@ end
 
 -- Turn the {text, hlgroup} lines into extmark virt_lines, optionally wrapped in
 -- a box with the given border style (nil/'none'/unknown => no box).
-local function build_virt(lines, border)
+-- Build the extmark virt_lines for a cell. `title` (optional {text, hl}) is the
+-- run marker: embedded in the box's top border when there is output, or drawn
+-- as a single rule line ("─── ✓ [N] ───") when there is none.
+local function build_virt(lines, border, title)
   local b = BORDERS[border]
+
+  -- No border: plain lines, with the title (if any) as a leading plain line.
   if not b then
     local virt = {}
+    if title then
+      virt[#virt + 1] = { { title[1], title[2] } }
+    end
     for _, l in ipairs(lines) do
       virt[#virt + 1] = { { l[1], l[2] } }
     end
     return virt
   end
+
+  -- Bordered, no output: a single rule line embedding the title.
+  if #lines == 0 then
+    if not title then
+      return {}
+    end
+    return {
+      {
+        { string.rep(b.h, 3) .. ' ', BORDER_HL },
+        { title[1], title[2] },
+        { ' ' .. string.rep(b.h, 3), BORDER_HL },
+      },
+    }
+  end
+
+  -- Bordered box; the title (if any) is embedded in the top border.
   local cap = math.max((vim.o.columns or 80) - 4, 10)
   local width = 0
   for _, l in ipairs(lines) do
-    local w = vim.fn.strdisplaywidth(l[1])
-    if w > width then
-      width = w
-    end
+    width = math.max(width, vim.fn.strdisplaywidth(l[1]))
+  end
+  if title then
+    width = math.max(width, vim.fn.strdisplaywidth(title[1]) + 2)
   end
   if width > cap then
     width = cap
   end
-  local virt = { { { b.tl .. string.rep(b.h, width + 2) .. b.tr, BORDER_HL } } }
+
+  local top
+  if title then
+    local fill = math.max(width - 1 - vim.fn.strdisplaywidth(title[1]), 0)
+    top = {
+      { b.tl .. b.h .. ' ', BORDER_HL },
+      { title[1], title[2] },
+      { ' ' .. string.rep(b.h, fill) .. b.tr, BORDER_HL },
+    }
+  else
+    top = { { b.tl .. string.rep(b.h, width + 2) .. b.tr, BORDER_HL } }
+  end
+
+  local virt = { top }
   for _, l in ipairs(lines) do
     local text = trunc(l[1], width)
     local pad = width - vim.fn.strdisplaywidth(text)
@@ -127,14 +165,25 @@ local function redraw(bufnr, cell_id)
     }
     lines = kept
   end
-  if #lines == 0 then
+  -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
+  -- embedded in the top border for cells with output, or as a single rule line
+  -- for cells with none.
+  local title = nil
+  if c.marker and c.done then
+    local label = c.ok and '✓' or '✗'
+    if c.count then
+      label = label .. (' [%d]'):format(c.count)
+    end
+    title = { label, c.ok and HL.ok or HL.error }
+  end
+  local virt = build_virt(lines, c.border, title)
+  if #virt == 0 then
     if c.mark_id then
       pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
       c.mark_id = nil
     end
     return
   end
-  local virt = build_virt(lines, c.border)
   local linecount = vim.api.nvim_buf_line_count(bufnr)
   local line0 = math.min(math.max(c.end_line - 1, 0), linecount - 1)
   local opts = {
@@ -169,7 +218,7 @@ local function schedule(bufnr, cell_id)
 end
 
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
-function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border)
+function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker)
   local s = bstate(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
   -- Drop stored output for any earlier run whose range overlaps this one, so
@@ -188,7 +237,25 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border)
     pending = false,
     max_lines = max_lines,
     border = border,
+    marker = marker,
+    done = false,
+    count = nil,
+    ok = true,
   }
+end
+
+-- Mark a cell finished: record the execution count and ok/error status so the
+-- "✓ [N]" / "✗ [N]" run marker can be drawn.
+function M.mark_done(bufnr, cell_id, count, status)
+  local c = cell(bufnr, cell_id)
+  if not c then
+    return
+  end
+  c.done = true
+  c.pending = false
+  c.count = count
+  c.ok = status ~= 'error'
+  redraw(bufnr, cell_id)
 end
 
 function M.add(bufnr, cell_id, kind, text)

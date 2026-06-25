@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.0.3
+Version:         2.0.4
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -286,6 +286,13 @@ cmdline_notebook_airline_section  vim-airline section the kernel status is added
 cmdline_notebook_output_win  Window used by :CmdLineNotebookOpenOutput: 'float'
 			(a read-only centered popup; q or <Esc> closes it) or
 			'split'. Default: 'float'.
+
+							*cmdline_notebook_exec_marker*
+cmdline_notebook_exec_marker  When 1 (default), mark each executed cell with
+			"✓ [N]" ("✗ [N]" on error), where N is the kernel
+			execution count: embedded in the output box's top border,
+			or a single rule line ("─── ✓ [N] ───") for cells with no
+			output, so they still show that they ran. 0 to disable.
 
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*

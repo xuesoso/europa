@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.0.3-blue)
+![version](https://img.shields.io/badge/version-2.0.4-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -144,6 +144,11 @@ and render output inline instead of to a REPL:
   - `,K` clears the output under the current cell; `,o` opens the current
     cell's full output in a popup.
 
+Each executed cell is marked with `✓ [N]` (or `✗ [N]` on error), where `N` is
+the kernel execution count — embedded in the output box's top border, or shown
+as a single rule line (`─── ✓ [N] ───`) for cells with no output, so they still
+show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
+
 Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
 `:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
@@ -238,6 +243,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_statusline` | `1` | Show a kernel-status segment in `'statusline'` and in vim-airline |
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
+| `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
 
 ```vim
 let cmdline_notebook_enable       = 1
