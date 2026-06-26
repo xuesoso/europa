@@ -25,6 +25,9 @@ echo "== code-block unit behaviour (regression) =="
 echo "== notebook render: re-run replaces output (regression) =="
 "$NVIM" --headless -u NONE -N -l test/render.lua || rc=1
 
+echo "== notebook render: run marker / aborted cell (regression) =="
+"$NVIM" --headless -u NONE -N -l test/render_marker.lua || rc=1
+
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1
 

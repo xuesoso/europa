@@ -171,7 +171,9 @@ local function redraw(bufnr, cell_id)
   local title = nil
   if c.marker and c.done then
     local label = c.ok and '✓' or '✗'
-    if c.count then
+    -- Guard the format: an aborted cell has no execution count (see mark_done),
+    -- and only a real number is valid for '%d'.
+    if type(c.count) == 'number' then
       label = label .. (' [%d]'):format(c.count)
     end
     title = { label, c.ok and HL.ok or HL.error }
@@ -246,6 +248,12 @@ end
 
 -- Mark a cell finished: record the execution count and ok/error status so the
 -- "✓ [N]" / "✗ [N]" run marker can be drawn.
+--
+-- A cell that was queued behind one that errored gets aborted by the kernel: it
+-- reports status 'aborted' and execution_count null, which arrives here as
+-- vim.NIL (a userdata) after JSON decoding. Normalise both so the marker never
+-- formats the sentinel (vim.NIL is truthy, so a plain `if count` does not catch
+-- it) and an aborted/errored cell is never shown as a success.
 function M.mark_done(bufnr, cell_id, count, status)
   local c = cell(bufnr, cell_id)
   if not c then
@@ -253,8 +261,8 @@ function M.mark_done(bufnr, cell_id, count, status)
   end
   c.done = true
   c.pending = false
-  c.count = count
-  c.ok = status ~= 'error'
+  c.count = type(count) == 'number' and count or nil
+  c.ok = status == 'ok'
   redraw(bufnr, cell_id)
 end
 
