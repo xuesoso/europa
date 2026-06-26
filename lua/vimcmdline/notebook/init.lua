@@ -113,7 +113,8 @@ function M.start(bufnr)
     return false
   end
   local b = { ready = false, queue = {}, cell_seq = 0, cfg = cfg,
-              pending = 0, busy_visible = false, busy_timer = false }
+              pending = 0, busy_visible = false, busy_timer = false,
+              complete_seq = 0, completions = {} }
   buffers[bufnr] = b
   local handle, serr = bridge.spawn(
     cfg.python,
@@ -165,6 +166,7 @@ function M.restart(bufnr)
   b.queue = {}
   b.pending = 0
   b.busy_visible = false
+  b.completions = {}  -- drop callbacks waiting on the pre-restart kernel
   render.clear_all(bufnr)
   b.handle.send({ type = 'restart' })
   notify('restarting kernel…')
@@ -201,6 +203,26 @@ function M.execute_cell(bufnr, end_line, lines)
   end
   b.pending = b.pending + 1
   note_busy_change(bufnr)
+end
+
+-- Ask the live kernel to complete `code` with the cursor at `cursor_pos`
+-- (a 0-based offset in Unicode codepoints into `code`). `cb` is invoked exactly
+-- once with (matches, cursor_start, cursor_end); matches is a list of strings
+-- and the cursor offsets are codepoint offsets into `code`. When no kernel is
+-- running/ready, `cb` fires immediately with an empty match list so callers
+-- (e.g. a completion source) never hang waiting on a reply.
+function M.complete(bufnr, code, cursor_pos, cb)
+  bufnr = resolve(bufnr)
+  local b = buffers[bufnr]
+  if not b or not b.handle or not b.ready then
+    cb({}, cursor_pos, cursor_pos)
+    return
+  end
+  b.complete_seq = b.complete_seq + 1
+  local req_id = b.complete_seq
+  b.completions[req_id] = cb
+  b.handle.send({ type = 'complete', req_id = req_id,
+                  code = code, cursor_pos = cursor_pos })
 end
 
 function M._flush_queue(bufnr)
@@ -254,6 +276,12 @@ function M._on_event(bufnr, ev)
     render.mark_done(bufnr, ev.cell_id, ev.execution_count, ev.status)
     b.pending = math.max(b.pending - 1, 0)
     note_busy_change(bufnr)
+  elseif t == 'complete_reply' then
+    local cb = b.completions[ev.req_id]
+    if cb then
+      b.completions[ev.req_id] = nil
+      cb(ev.matches or {}, ev.cursor_start, ev.cursor_end)
+    end
   elseif t == 'bridge_error' then
     if ev.fatal then
       notify(ev.message or 'kernel error', vim.log.levels.ERROR)

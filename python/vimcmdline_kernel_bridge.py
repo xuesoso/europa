@@ -15,9 +15,13 @@ enqueues requests. This keeps all zmq socket access single-threaded.
 Requests (stdin, one JSON object per line):
     {"type":"hello","startup_code":[...],"kernel_name":"python3","timeout":30}
     {"type":"execute","cell_id":<int>,"code":"<source>"}
+    {"type":"complete","req_id":<int>,"code":"<source>","cursor_pos":<int>}
     {"type":"interrupt"}
     {"type":"restart"}
     {"type":"shutdown"}
+
+``cursor_pos`` is a 0-based offset in Unicode codepoints into ``code``; the
+reply's ``cursor_start``/``cursor_end`` are codepoint offsets in the same units.
 
 Events (stdout, one JSON object per line):
     {"type":"kernel_ready"}
@@ -27,6 +31,7 @@ Events (stdout, one JSON object per line):
     {"type":"display_data","text":"...","has_image":<bool>,"cell_id":<int>}
     {"type":"error","ename":"...","evalue":"...","traceback":[...],"cell_id":<int>}
     {"type":"execute_reply","status":"ok"|"error","execution_count":<int|null>,"cell_id":<int>}
+    {"type":"complete_reply","req_id":<int>,"matches":[...],"cursor_start":<int>,"cursor_end":<int>,"status":"ok"|"error"}
     {"type":"bridge_error","fatal":<bool>,"message":"...","cell_id":<int|null>}
 """
 
@@ -68,6 +73,8 @@ class Bridge:
         self.startup_code = []
         # parent msg_id -> cell_id; only the kernel thread touches this.
         self._cell_by_msgid = OrderedDict()
+        # parent msg_id -> completion req_id (for complete_request round-trips).
+        self._complete_by_msgid = OrderedDict()
         self._req_q = Queue()
         self._stop = threading.Event()
 
@@ -145,6 +152,8 @@ class Bridge:
             self._handle_hello(req)
         elif rtype == "execute":
             self._do_execute(req.get("cell_id"), req.get("code", ""))
+        elif rtype == "complete":
+            self._do_complete(req)
         elif rtype == "interrupt":
             if self.km is not None:
                 self.km.interrupt_kernel()
@@ -210,6 +219,32 @@ class Bridge:
         while len(self._cell_by_msgid) > 500:
             self._cell_by_msgid.popitem(last=False)
 
+    def _do_complete(self, req):
+        # A code/cursor_pos completion request (Jupyter complete_request). The
+        # reply, matched back to req_id, carries the kernel's own completions —
+        # including IPython runtime completions such as DataFrame/dict keys.
+        req_id = req.get("req_id")
+        code = req.get("code", "")
+        cursor_pos = req.get("cursor_pos")
+        if cursor_pos is None:
+            cursor_pos = len(code)
+        if self.kc is None:
+            emit({"type": "complete_reply", "req_id": req_id, "matches": [],
+                  "cursor_start": cursor_pos, "cursor_end": cursor_pos,
+                  "status": "error"})
+            return
+        try:
+            msg_id = self.kc.complete(code, cursor_pos)
+        except Exception as exc:
+            emit({"type": "complete_reply", "req_id": req_id, "matches": [],
+                  "cursor_start": cursor_pos, "cursor_end": cursor_pos,
+                  "status": "error"})
+            log("complete failed:", exc)
+            return
+        self._complete_by_msgid[msg_id] = req_id
+        while len(self._complete_by_msgid) > 200:
+            self._complete_by_msgid.popitem(last=False)
+
     def _do_restart(self):
         if self.km is None:
             return
@@ -222,6 +257,7 @@ class Bridge:
             self._stop.set()
             return
         self._cell_by_msgid.clear()
+        self._complete_by_msgid.clear()
         self._submit_startup()
         emit({"type": "kernel_ready"})
 
@@ -280,12 +316,25 @@ class Bridge:
 
     def _handle_shell(self, msg):
         parent = msg.get("parent_header", {}).get("msg_id")
+        mtype = msg.get("msg_type") or msg.get("header", {}).get("msg_type")
+        content = msg.get("content", {})
+        # complete_reply is not tied to a cell; route it via its own msgid map
+        # BEFORE the cell lookup, otherwise it is dropped as an untracked reply.
+        if mtype == "complete_reply":
+            req_id = self._complete_by_msgid.pop(parent, None)
+            if req_id is None:
+                return
+            emit({"type": "complete_reply",
+                  "req_id": req_id,
+                  "matches": content.get("matches", []),
+                  "cursor_start": content.get("cursor_start"),
+                  "cursor_end": content.get("cursor_end"),
+                  "status": content.get("status", "ok")})
+            return
         cell_id = self._cell_for(parent)
         if cell_id is None:
             return
-        mtype = msg.get("msg_type") or msg.get("header", {}).get("msg_type")
         if mtype == "execute_reply":
-            content = msg.get("content", {})
             emit({"type": "execute_reply",
                   "status": content.get("status"),
                   "execution_count": content.get("execution_count"),

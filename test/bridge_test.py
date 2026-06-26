@@ -131,6 +131,34 @@ def run():
         joined = "".join("".join(e.get("traceback", [])) for e in errs)
         assert "\x1b[" not in joined, "ANSI escapes not stripped from traceback"
 
+        # Completion: define a dict + a uniquely named var in the live kernel,
+        # then complete against both. Dict-key completion goes through the very
+        # same _ipython_key_completions_ machinery pandas exposes for df["col"],
+        # so this exercises the runtime completion path without needing pandas.
+        d.send({"type": "execute", "cell_id": 3,
+                "code": "d = {'col_alpha': 1, 'col_beta': 2}\nsentinel_var = 42"})
+        d.collect_cell(3, 60)
+
+        key_code = "d['col_a"
+        d.send({"type": "complete", "req_id": 1, "code": key_code,
+                "cursor_pos": len(key_code)})
+        rep = d.wait_for(lambda e: e.get("type") == "complete_reply"
+                         and e.get("req_id") == 1, 60)
+        assert rep is not None, "no complete_reply for the dict-key request"
+        kmatches = rep.get("matches", [])
+        assert any("col_alpha" in m for m in kmatches), \
+            "dict-key completion missing 'col_alpha': %r" % rep
+
+        name_code = "sentinel_va"
+        d.send({"type": "complete", "req_id": 2, "code": name_code,
+                "cursor_pos": len(name_code)})
+        rep = d.wait_for(lambda e: e.get("type") == "complete_reply"
+                         and e.get("req_id") == 2, 60)
+        assert rep is not None, "no complete_reply for the name request"
+        nmatches = rep.get("matches", [])
+        assert any("sentinel_var" in m for m in nmatches), \
+            "name completion missing 'sentinel_var': %r" % rep
+
         print("ALL BRIDGE TESTS PASSED")
         return 0
     finally:

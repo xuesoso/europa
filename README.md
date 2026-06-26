@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.0.4-blue)
+![version](https://img.shields.io/badge/version-2.1.0-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -35,6 +35,9 @@ emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output
 
   - **Notebook mode** — run cells through a Jupyter kernel and see text output
     inline, in a rounded, colorable box ([details](#notebook-mode-neovim--python)).
+  - **Live column/key completion** — in notebook mode, feed pandas DataFrame
+    columns and dict keys from the running kernel into [blink.cmp]
+    ([details](#column--key-completion)).
   - **Code blocks / cells** — execute and navigate `# %%`-delimited cells.
   - **Multi-language REPL** — send lines/paragraphs/files to 18 interpreters.
   - **`,` key prefix** by default; set [`cmdline_default_keybindings`](#key-mappings)
@@ -114,6 +117,7 @@ behavior.
 | Neovim ≥ 0.10 | required | — |
 | [`jupyter_client`] + [`ipykernel`] (a **Jupyter kernel**) | **required** | `pip install jupyter_client ipykernel` |
 | [plotty] (terminal image display) | **optional** | `pip install plotty` (needs `tmux` ≥ 3.4 + a sixel/kitty terminal) |
+| [blink.cmp] (live column/key completion) | optional | via your plugin manager |
 
 The Jupyter kernel is what executes your code and returns structured output.
 plotty is only needed if you want plots rendered in the terminal — without it,
@@ -155,6 +159,34 @@ Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookOpenOutput` (opens the cell's full, untruncated output in a
 read-only floating popup — `q` or `<Esc>` closes it; use a split instead with
 `cmdline_notebook_output_win`).
+
+### Column & key completion
+
+In notebook mode, europa can feed completions from the **running kernel** into
+[blink.cmp]. Because the kernel introspects the *live* namespace, it suggests
+things a static analyzer cannot know — most usefully **pandas DataFrame columns**
+and **dict keys** (`df["price"]`, `d['key']`), plus names bound in earlier cells.
+
+It is wired as a blink source and is **active only while a notebook kernel is
+running** in the current Python buffer. In plain REPL mode, or with notebook mode
+off, it is inert and needs no Jupyter kernel. It fires **only inside string
+subscripts** (`df["…`, `.loc["…`, `groupby("…`); attribute and method completion
+is left to your LSP, which carries signatures and docstrings, so there are no
+duplicate suggestions. Completions are fetched asynchronously, so typing is never
+blocked.
+
+Register the source with [blink.cmp]:
+
+```lua
+require('blink.cmp').setup({
+  sources = {
+    default = { 'kernel', 'lsp', 'path' },
+    providers = {
+      kernel = { name = 'kernel', module = 'vimcmdline.notebook.blink_source' },
+    },
+  },
+})
+```
 
 ## Options
 
@@ -369,5 +401,6 @@ Plugins with similar functionality are [vimcmdline] (upstream), [neoterm],
 [repl.nvim]: https://gitlab.com/HiPhish/repl.nvim
 [Jupyter]: https://jupyter.org
 [plotty]: https://github.com/xuesoso/plotty
+[blink.cmp]: https://github.com/saghen/blink.cmp
 [`jupyter_client`]: https://github.com/jupyter/jupyter_client
 [`ipykernel`]: https://github.com/ipython/ipykernel
