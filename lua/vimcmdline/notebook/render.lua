@@ -50,7 +50,10 @@ local function flatten(c)
   for _, seg in ipairs(c.segments) do
     if seg.kind == 'image' then
       for _, row in ipairs(seg.image.rows) do
-        out[#out + 1] = { row, seg.image.hl, img = true }
+        -- w: placeholder rows have a known display width (their column
+        -- count); carrying it avoids strdisplaywidth over the long
+        -- combining-character strings on every redraw.
+        out[#out + 1] = { row, seg.image.hl, img = true, w = seg.image.cols }
       end
     else
       local group = HL[seg.kind] or HL.stdout
@@ -318,7 +321,7 @@ local function build_virt(lines, border, title, ft)
   local cap = math.max((vim.o.columns or 80) - 4, 10)
   local width = 0
   for _, l in ipairs(lines) do
-    width = math.max(width, dw(l[1]))
+    width = math.max(width, l.w or dw(l[1]))
   end
   if title then
     width = math.max(width, dw(title[1]) + 2)
@@ -356,7 +359,7 @@ local function build_virt(lines, border, title, ft)
   local virt = { top }
   for _, l in ipairs(shown) do
     local text = l[1]
-    local pad = width - dw(text)
+    local pad = width - (l.w or dw(text))
     local chunks = { { b.v .. ' ', BORDER_HL } }
     for _, run in ipairs(content_runs(l, ft)) do
       chunks[#chunks + 1] = run

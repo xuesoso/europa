@@ -132,16 +132,33 @@ function M.delete_bytes(iid, wrap)
   return wrap and wrap_tmux(apc) or apc
 end
 
+-- Diacritic codepoints pre-encoded to UTF-8 once at load (nr2char is a
+-- vim.fn crossing; a 60x23 grid would otherwise make ~2800 of them).
+local DIA_CHARS = {}
+for i, cp in ipairs(DIACRITICS) do
+  DIA_CHARS[i] = vim.fn.nr2char(cp)
+end
+
 -- One row of the Unicode placeholder grid: `cols` cells of
 -- PLACEHOLDER + diacritic(row) + diacritic(col). Plain text; the image id is
--- conveyed by the row's highlight group foreground color.
+-- conveyed by the row's highlight group foreground color. Rows depend only on
+-- (row, cols), which recur across figures of the same width — memoised.
+local row_cache = {}
+
 function M.placeholder_row(row, cols)
-  local rd = vim.fn.nr2char(DIACRITICS[row + 1])
-  local parts = {}
-  for col = 0, cols - 1 do
-    parts[col + 1] = PLACEHOLDER .. rd .. vim.fn.nr2char(DIACRITICS[col + 1])
+  local key = row * 1024 + cols
+  local hit = row_cache[key]
+  if hit then
+    return hit
   end
-  return table.concat(parts)
+  local rd = DIA_CHARS[row + 1]
+  local parts = {}
+  for col = 1, cols do
+    parts[col] = PLACEHOLDER .. rd .. DIA_CHARS[col]
+  end
+  local text = table.concat(parts)
+  row_cache[key] = text
+  return text
 end
 
 -- Highlight group whose RGB foreground encodes the image id (how kitty knows
