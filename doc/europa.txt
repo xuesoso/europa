@@ -77,6 +77,18 @@ Code-block (cell) mappings, see |vimcmdline_blocks|: >
 	,]			Jump to the next block
 	,[			Jump to the previous block
 <
+These are also available as commands and <Plug> mappings, for binding your
+own keys without a raw ":call Func()<CR>": >
+	:CmdLineExecCell            <Plug>(cmdline-exec-cell)
+	:CmdLineExecCellJumpNext    <Plug>(cmdline-exec-cell-jump-next)
+	:CmdLineExecToEnd           <Plug>(cmdline-exec-to-end)
+	:CmdLineNextCell            <Plug>(cmdline-next-cell)
+	:CmdLinePrevCell            <Plug>(cmdline-prev-cell)
+<
+A count prefix (e.g. "3<Plug>(cmdline-next-cell)") moves/executes N cells for
+ExecCellJumpNext/NextCell/PrevCell. ExecCell/ExecToEnd always run once
+regardless of a count, since a count re-running the same cell N times would
+just duplicate its side effects rather than doing anything useful.
 Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
 	,k			Toggle notebook mode (start/stop the kernel)
 	,K			Clear the output under the current cell

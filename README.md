@@ -223,6 +223,22 @@ let cmdline_default_keybindings = 1
 let cmdline_map_exec_block      = '<F5>'
 ```
 
+Cell execution/navigation is also reachable as commands and `<Plug>` mappings,
+so you don't have to hardcode `:call Func()<CR>` to bind your own keys:
+
+| Command | `<Plug>` mapping | Action |
+|---|---|---|
+| `:CmdLineExecCell` | `<Plug>(cmdline-exec-cell)` | Execute the current cell |
+| `:CmdLineExecCellJumpNext` | `<Plug>(cmdline-exec-cell-jump-next)` | Execute the current cell, jump to the next |
+| `:CmdLineExecToEnd` | `<Plug>(cmdline-exec-to-end)` | Execute from the cursor to the end of the cell |
+| `:CmdLineNextCell` | `<Plug>(cmdline-next-cell)` | Jump to the next cell |
+| `:CmdLinePrevCell` | `<Plug>(cmdline-prev-cell)` | Jump to the previous cell |
+
+A count prefix (e.g. `3<Plug>(cmdline-next-cell)`) moves/executes N cells for
+`ExecCellJumpNext`/`NextCell`/`PrevCell`; `ExecCell`/`ExecToEnd` always run
+once regardless of a count, since re-running the same cell N times would just
+duplicate its side effects.
+
 ### General options
 
 | Variable | Default | Description |

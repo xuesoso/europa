@@ -241,15 +241,15 @@ function VimCmdLineCreateMaps()
                     \ ' :call VimCmdLineSendMBlock()<CR>'
         " Code-block (g:cmdline_block_sep, default '# %%') mappings
         exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_block .
-                    \ ' :call ExecuteCurrentCodeBlock()<CR>'
+                    \ ' <Plug>(cmdline-exec-cell)'
         exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_block_and_jump .
-                    \ ' :call ExecuteCurrentCodeBlockJumpNext()<CR>'
+                    \ ' <Plug>(cmdline-exec-cell-jump-next)'
         exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_to_end .
-                    \ ' :call ExecuteToEndCodeBlock()<CR>'
+                    \ ' <Plug>(cmdline-exec-to-end)'
         exe 'nmap <silent><buffer> ' . g:cmdline_map_next_block .
-                    \ ' :call ToNextCodeBlock()<CR>'
+                    \ ' <Plug>(cmdline-next-cell)'
         exe 'nmap <silent><buffer> ' . g:cmdline_map_prev_block .
-                    \ ' :call ToLastCodeBlock()<CR>'
+                    \ ' <Plug>(cmdline-prev-cell)'
     endif
     if exists("b:cmdline_quit_cmd")
         exe 'nmap <silent><buffer> ' . g:cmdline_map_quit . ' :call VimCmdLineQuit("' . b:cmdline_filetype . '")<CR>'
@@ -490,7 +490,14 @@ function! LastCodeBlock()
     return search(s:BlockSepPattern(), 'bcWn')
 endfunction
 
-function! ToNextCodeBlock()
+" Single-step cursor moves, with no notion of a count. Used both by the
+" count-aware ToNextCodeBlock()/ToLastCodeBlock() below and internally by
+" ExecuteCurrentCodeBlockJumpNext(), which must NOT let its internal jump
+" re-read v:count1: that variable stays set to the outer command's count for
+" the whole duration of the command (it is not reset per nested function
+" call), so calling the count-aware wrapper from inside a count-aware caller
+" would compound the count instead of taking one step per loop iteration.
+function! s:StepNextCodeBlock()
     let l:nextblock = NextCodeBlock()
     if l:nextblock == 0
         exe line("$")
@@ -499,13 +506,30 @@ function! ToNextCodeBlock()
     endif
 endfunction
 
-function! ToLastCodeBlock()
+function! s:StepLastCodeBlock()
     let l:lastblock = LastCodeBlock()
     if l:lastblock <= 2
         exe 1
     else
         exe l:lastblock - 2
     endif
+endfunction
+
+" A count moves N cells forward/back instead of just one.
+function! ToNextCodeBlock()
+    let l:n = v:count1
+    while l:n > 0
+        call s:StepNextCodeBlock()
+        let l:n -= 1
+    endwhile
+endfunction
+
+function! ToLastCodeBlock()
+    let l:n = v:count1
+    while l:n > 0
+        call s:StepLastCodeBlock()
+        let l:n -= 1
+    endwhile
 endfunction
 
 " Last line of the current block: the line before the next separator, or the
@@ -526,6 +550,10 @@ function! s:CmdLineCellSink(lines, endline)
     endif
 endfunction
 
+" Executes exactly once no matter what count preceded the mapping/command: a
+" "run this cell" action has no sane meaning repeated blindly N times (it
+" would just re-queue/re-run the same cell and duplicate side effects), so
+" any count is intentionally ignored here.
 function! ExecuteCurrentCodeBlock()
     let l:start = LastCodeBlock() + 1
     let l:end = s:CurrentBlockEnd()
@@ -533,20 +561,46 @@ function! ExecuteCurrentCodeBlock()
     call s:CmdLineCellSink(l:lines, l:end)
 endfunction
 
+" Same rationale as ExecuteCurrentCodeBlock(): always run once, count ignored.
 function! ExecuteToEndCodeBlock()
     let l:end = s:CurrentBlockEnd()
     let l:lines = getline(line("."), l:end)
     call s:CmdLineCellSink(l:lines, l:end)
 endfunction
 
+" Unlike ExecuteCurrentCodeBlock(), a count here has an unambiguous meaning:
+" "execute this cell and the next N-1 cells", so v:count1 is honored.
 function! ExecuteCurrentCodeBlockJumpNext()
-    let l:start = LastCodeBlock() + 1
-    let l:end = s:CurrentBlockEnd()
-    let l:lines = getline(l:start, l:end)
-    call s:CmdLineCellSink(l:lines, l:end)
-    call ToNextCodeBlock()
+    let l:n = v:count1
+    while l:n > 0
+        let l:start = LastCodeBlock() + 1
+        let l:end = s:CurrentBlockEnd()
+        let l:lines = getline(l:start, l:end)
+        call s:CmdLineCellSink(l:lines, l:end)
+        call s:StepNextCodeBlock()
+        let l:n -= 1
+    endwhile
 endfunction
 
+" :command! entry points, so cell exec/navigation is reachable without a raw
+" ":call Func()<CR>" and shows up in ":CmdLine<Tab>" completion.
+command! CmdLineExecCell         call ExecuteCurrentCodeBlock()
+command! CmdLineExecCellJumpNext call ExecuteCurrentCodeBlockJumpNext()
+command! CmdLineExecToEnd        call ExecuteToEndCodeBlock()
+command! CmdLineNextCell         call ToNextCodeBlock()
+command! CmdLinePrevCell         call ToLastCodeBlock()
+
+" <Plug> mappings for the same entry points, so users can bind their own keys
+" (e.g. `nmap <buffer> <F5> <Plug>(cmdline-exec-cell)`) instead of hardcoding
+" ":call Func()<CR>". Built with <Cmd> rather than plain ":...<CR>" so a count
+" typed before the key (e.g. "3<key>") reaches the function as v:count/
+" v:count1 instead of Vim silently rewriting it into a ".,.+2" cmdline range
+" and invoking the function once per line in that range.
+nnoremap <silent> <Plug>(cmdline-exec-cell)           <Cmd>call ExecuteCurrentCodeBlock()<CR>
+nnoremap <silent> <Plug>(cmdline-exec-cell-jump-next) <Cmd>call ExecuteCurrentCodeBlockJumpNext()<CR>
+nnoremap <silent> <Plug>(cmdline-exec-to-end)         <Cmd>call ExecuteToEndCodeBlock()<CR>
+nnoremap <silent> <Plug>(cmdline-next-cell)           <Cmd>call ToNextCodeBlock()<CR>
+nnoremap <silent> <Plug>(cmdline-prev-cell)           <Cmd>call ToLastCodeBlock()<CR>
 
 " Default mappings
 " Key-mapping prefix. By default ',' prefixes all cmdline actions. Set
