@@ -567,6 +567,10 @@ function! s:CmdLineCellSink(lines, endline)
     " failure) keeps b:cmdline_notebook honest.
     if !get(b:, 'cmdline_notebook', 0) && s:ShouldAutoNotebook()
         let b:cmdline_notebook = 1
+        " Auto-enable bypasses VimCmdLineStartApp(), so bind the buffer's cmdline
+        " maps here too — otherwise the send maps (cmdline_map_send etc.) never
+        " get created and only the exec-cell command works.
+        call VimCmdLineCreateMaps()
     endif
     if get(b:, 'cmdline_notebook', 0)
         " Notebook mode is on but no kernel is attached (never started, stopped,
