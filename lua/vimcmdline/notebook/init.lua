@@ -194,7 +194,8 @@ function M.execute_cell(bufnr, end_line, lines)
   b.cell_seq = b.cell_seq + 1
   local cell_id = b.cell_seq
   local start_line = math.max(end_line - #lines + 1, 1)
-  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border, b.cfg.exec_marker)
+  render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border, b.cfg.exec_marker,
+               vim.bo[bufnr].filetype)
   local req = { type = 'execute', cell_id = cell_id, code = table.concat(lines, '\n') }
   if b.ready then
     b.handle.send(req)
@@ -336,6 +337,7 @@ function M.open_output(bufnr, start_line, end_line)
     return
   end
   local cfg = config.read()
+  local parent_ft = vim.bo[bufnr].filetype
 
   local obuf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(obuf, 0, -1, false, text)
@@ -344,10 +346,15 @@ function M.open_output(bufnr, start_line, end_line)
   vim.bo[obuf].swapfile = false
   vim.bo[obuf].modifiable = false   -- read-only display
   vim.bo[obuf].readonly = true
+  if parent_ft and parent_ft ~= '' then
+    vim.bo[obuf].filetype = parent_ft   -- match parent file's syntax
+  end
   pcall(vim.api.nvim_buf_set_name, obuf, 'vimcmdline-output')
 
   if cfg.output_win == 'split' then
     vim.cmd('botright sbuffer ' .. obuf)
+    local swin = vim.api.nvim_get_current_win()
+    vim.wo[swin].foldenable = false   -- do not fold output
     close_keys(obuf, nil)
     return
   end
@@ -372,6 +379,7 @@ function M.open_output(bufnr, start_line, end_line)
     title_pos = 'center',
   })
   vim.wo[win].wrap = true
+  vim.wo[win].foldenable = false   -- do not fold output
   vim.wo[win].winhighlight = 'FloatBorder:CmdlineNotebookBorder,FloatTitle:CmdlineNotebookBorder'
   close_keys(obuf, win)
 end

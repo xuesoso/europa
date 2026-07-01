@@ -46,6 +46,58 @@ local function flatten(c)
   return out
 end
 
+-- ft -> scratch bufnr, reused across redraws to color output text with the
+-- parent file's syntax instead of one flat color per output kind.
+local syntax_bufs = {}
+
+local function get_syntax_buf(ft)
+  local buf = syntax_bufs[ft]
+  if buf and vim.api.nvim_buf_is_valid(buf) then
+    return buf
+  end
+  buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = ft
+  syntax_bufs[ft] = buf
+  return buf
+end
+
+-- Split `text` into {chunk, hlgroup} runs following filetype `ft`'s :syntax
+-- highlighting. Falls back to a single `fallback_hl` run when `ft` is empty
+-- or has no syntax definitions (e.g. plain stdout with no filetype).
+local function ft_highlight_line(ft, text, fallback_hl)
+  if not ft or ft == '' or text == '' then
+    return { { text, fallback_hl } }
+  end
+  if vim.g.syntax_on ~= 1 then
+    pcall(vim.cmd, 'syntax enable')
+  end
+  local buf = get_syntax_buf(ft)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+  local runs = {}
+  local ok = pcall(vim.api.nvim_buf_call, buf, function()
+    vim.cmd('syntax sync fromstart')
+    local len = #text
+    local col = 0
+    while col < len do
+      local name = vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, col + 1, 1)), 'name')
+      local start_col = col
+      col = col + 1
+      while col < len do
+        local name2 = vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, col + 1, 1)), 'name')
+        if name2 ~= name then break end
+        col = col + 1
+      end
+      runs[#runs + 1] = { text:sub(start_col + 1, col), (name ~= '' and name) or fallback_hl }
+    end
+  end)
+  if not ok or #runs == 0 then
+    return { { text, fallback_hl } }
+  end
+  return runs
+end
+
 local BORDER_HL = 'CmdlineNotebookBorder'
 
 local BORDERS = {
@@ -76,7 +128,16 @@ end
 -- Build the extmark virt_lines for a cell. `title` (optional {text, hl}) is the
 -- run marker: embedded in the box's top border when there is output, or drawn
 -- as a single rule line ("─── ✓ [N] ───") when there is none.
-local function build_virt(lines, border, title)
+-- Color a content line's text per `ft`'s syntax, unless it is one of our own
+-- plugin notices (drawn in HL.info) rather than actual kernel output.
+local function content_runs(l, ft)
+  if not ft or l[2] == HL.info then
+    return { { l[1], l[2] } }
+  end
+  return ft_highlight_line(ft, l[1], l[2])
+end
+
+local function build_virt(lines, border, title, ft)
   local b = BORDERS[border]
 
   -- No border: plain lines, with the title (if any) as a leading plain line.
@@ -86,7 +147,7 @@ local function build_virt(lines, border, title)
       virt[#virt + 1] = { { title[1], title[2] } }
     end
     for _, l in ipairs(lines) do
-      virt[#virt + 1] = { { l[1], l[2] } }
+      virt[#virt + 1] = content_runs(l, ft)
     end
     return virt
   end
@@ -134,11 +195,12 @@ local function build_virt(lines, border, title)
   for _, l in ipairs(lines) do
     local text = trunc(l[1], width)
     local pad = width - vim.fn.strdisplaywidth(text)
-    virt[#virt + 1] = {
-      { b.v .. ' ', BORDER_HL },
-      { text, l[2] },
-      { string.rep(' ', pad) .. ' ' .. b.v, BORDER_HL },
-    }
+    local chunks = { { b.v .. ' ', BORDER_HL } }
+    for _, run in ipairs(content_runs({ text, l[2] }, ft)) do
+      chunks[#chunks + 1] = run
+    end
+    chunks[#chunks + 1] = { string.rep(' ', pad) .. ' ' .. b.v, BORDER_HL }
+    virt[#virt + 1] = chunks
   end
   virt[#virt + 1] = { { b.bl .. string.rep(b.h, width + 2) .. b.br, BORDER_HL } }
   return virt
@@ -178,7 +240,7 @@ local function redraw(bufnr, cell_id)
     end
     title = { label, c.ok and HL.ok or HL.error }
   end
-  local virt = build_virt(lines, c.border, title)
+  local virt = build_virt(lines, c.border, title, c.ft)
   if #virt == 0 then
     if c.mark_id then
       pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
@@ -220,7 +282,7 @@ local function schedule(bufnr, cell_id)
 end
 
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
-function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker)
+function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker, ft)
   local s = bstate(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
   -- Drop stored output for any earlier run whose range overlaps this one, so
@@ -240,6 +302,7 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     max_lines = max_lines,
     border = border,
     marker = marker,
+    ft = ft,
     done = false,
     count = nil,
     ok = true,
