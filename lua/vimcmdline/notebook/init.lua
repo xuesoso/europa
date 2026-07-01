@@ -54,8 +54,20 @@ function M.pending(bufnr)
   return b and b.pending or 0
 end
 
+-- Coalesce statusline redraws: a run-all burst delivers many replies in one
+-- event-loop tick and each used to trigger its own :redrawstatus!; one redraw
+-- after the tick shows the same final state.
+local status_dirty = false
+
 local function refresh_status()
-  pcall(vim.cmd, 'redrawstatus!')
+  if status_dirty then
+    return
+  end
+  status_dirty = true
+  vim.schedule(function()
+    status_dirty = false
+    pcall(vim.cmd, 'redrawstatus!')
+  end)
 end
 
 -- Track the busy state with a short debounce so cells that finish quickly do

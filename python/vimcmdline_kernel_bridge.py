@@ -36,6 +36,7 @@ Events (stdout, one JSON object per line):
 """
 
 import json
+import os
 import re
 import sys
 import threading
@@ -77,8 +78,23 @@ class Bridge:
         self._complete_by_msgid = OrderedDict()
         self._req_q = Queue()
         self._stop = threading.Event()
+        # Wakeup pipe: the stdin thread pokes the kernel thread out of its
+        # channel poll the moment a request arrives, so dispatch latency is
+        # bounded by the pipe (~0) instead of the poll timeout (~50ms).
+        self._wake_r, self._wake_w = os.pipe()
+        os.set_blocking(self._wake_w, False)
+        # zmq poller over both channel sockets + the wakeup pipe. Built lazily
+        # (and rebuilt after restart) by _poll_channels; None => try to build,
+        # False => unavailable, fall back to the timeout-based drain.
+        self._poller = None
 
     # -- threads ---------------------------------------------------------
+
+    def _wake(self):
+        try:
+            os.write(self._wake_w, b"\0")
+        except (BlockingIOError, OSError):
+            pass  # pipe full = a wakeup is already pending; that is enough
 
     def stdin_loop(self):
         """Read NDJSON requests from stdin and enqueue them. EOF => shutdown."""
@@ -92,8 +108,10 @@ class Bridge:
                 log("bad request json:", exc)
                 continue
             self._req_q.put(req)
+            self._wake()
         # stdin closed (Neovim went away): ask the kernel thread to shut down.
         self._req_q.put({"type": "shutdown"})
+        self._wake()
 
     def kernel_loop(self):
         """Single owner of the kernel client: dispatch requests + poll channels."""
@@ -119,15 +137,62 @@ class Bridge:
             if self._stop.is_set():
                 break
 
-            # Drain everything currently available on both channels.
+            # Sleep until a channel has traffic or a request arrives (wakeup
+            # pipe), then drain everything currently available on both
+            # channels without blocking.
+            self._wait_traffic()
             self._drain(self.kc.get_iopub_msg, self._handle_iopub)
             self._drain(self.kc.get_shell_msg, self._handle_shell)
 
         self._do_shutdown()
 
-    def _drain(self, getter, handler):
-        # Block briefly for the first message, then drain the rest non-blocking
-        # so a chatty cell does not lag one message per loop iteration.
+    def _build_poller(self):
+        """zmq poller over both channel sockets + the wakeup pipe, or False
+        when the socket internals are not available (fall back to timed
+        drains). Rebuilt after (re)start since channel sockets can change."""
+        if os.name != "posix":
+            return False  # zmq cannot poll a pipe fd on Windows
+        try:
+            import zmq
+            iopub = self.kc.iopub_channel.socket
+            shell = self.kc.shell_channel.socket
+            if iopub is None or shell is None:
+                return False
+            poller = zmq.Poller()
+            poller.register(iopub, zmq.POLLIN)
+            poller.register(shell, zmq.POLLIN)
+            poller.register(self._wake_r, zmq.POLLIN)
+            return poller
+        except Exception as exc:
+            log("zmq poller unavailable, using timed polls:", exc)
+            return False
+
+    def _wait_traffic(self):
+        """Block until one of {iopub, shell, request pipe} is readable."""
+        if self._poller is None:
+            self._poller = self._build_poller()
+        if self._poller is False:
+            # Fallback: the pre-poller behaviour (adds up to ~50ms latency).
+            self._drain_first(self.kc.get_iopub_msg, self._handle_iopub)
+            return
+        try:
+            self._poller.poll(250)
+        except Exception as exc:
+            if not self._stop.is_set():
+                log("poll failed, falling back to timed polls:", exc)
+            self._poller = False  # permanent fallback; avoids a busy loop
+            return
+        # Swallow pending wakeup bytes; the request queue is drained by the
+        # caller's next loop iteration.
+        try:
+            os.set_blocking(self._wake_r, False)
+            while os.read(self._wake_r, 4096):
+                pass
+        except (BlockingIOError, OSError):
+            pass
+
+    def _drain_first(self, getter, handler):
+        """Fallback-only: block briefly for one message, used when no poller."""
         try:
             handler(getter(timeout=0.05))
         except Empty:
@@ -135,13 +200,17 @@ class Bridge:
         except Exception as exc:
             if not self._stop.is_set():
                 log("channel poll error:", exc)
-            return
+
+    def _drain(self, getter, handler):
+        # Drain whatever is available right now without blocking.
         while not self._stop.is_set():
             try:
                 handler(getter(timeout=0))
             except Empty:
                 return
-            except Exception:
+            except Exception as exc:
+                if not self._stop.is_set():
+                    log("channel drain error:", exc)
                 return
 
     # -- request dispatch ------------------------------------------------
@@ -191,6 +260,7 @@ class Bridge:
                   "cell_id": None})
             self._stop.set()
             return
+        self._poller = None  # (re)build over the fresh channel sockets
         # Submit startup BEFORE announcing ready: the kernel executes requests
         # FIFO, so startup (e.g. plotty.enable()) always runs before user cells.
         self._submit_startup()
@@ -258,6 +328,7 @@ class Bridge:
             return
         self._cell_by_msgid.clear()
         self._complete_by_msgid.clear()
+        self._poller = None  # channel sockets may have changed across restart
         self._submit_startup()
         emit({"type": "kernel_ready"})
 

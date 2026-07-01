@@ -37,6 +37,12 @@ echo "== notebook render: perf benchmark + output correctness =="
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1
 
+echo "== bridge latency/throughput benchmark ($PYTHON) =="
+"$PYTHON" test/bench_bridge.py || rc=1
+
+echo "== end-to-end latency benchmark =="
+BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/bench_e2e.lua || rc=1
+
 if [ "$rc" -eq 0 ]; then
     echo "ALL TESTS PASSED"
 else
