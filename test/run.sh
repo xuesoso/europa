@@ -34,6 +34,12 @@ echo "== notebook render: re-run refreshes inline output (regression) =="
 echo "== notebook render: perf benchmark + output correctness =="
 "$NVIM" --headless -u NONE -N -l test/bench_render.lua || rc=1
 
+echo "== inline figures: kitty encoder unit + plotty golden comparison =="
+"$NVIM" --headless -u NONE -N -l test/image_test.lua || rc=1
+
+echo "== inline figures: end-to-end (kernel + matplotlib) =="
+BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/figures_e2e.lua || rc=1
+
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1
 

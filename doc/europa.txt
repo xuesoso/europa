@@ -317,6 +317,28 @@ cmdline_notebook_output_win  Window used by :CmdLineNotebookOpenOutput: 'float'
 			(a read-only centered popup; q or <Esc> closes it) or
 			'split'. Default: 'float'.
 
+							*cmdline_notebook_figures*
+cmdline_notebook_figures  Where matplotlib figures render: 'plotty' (default;
+			plotty's tmux pane), 'inline' (kitty graphics drawn
+			inside the cell's output box — needs a kitty-protocol
+			terminal such as kitty/ghostty, 'termguicolors', and
+			tmux `allow-passthrough on` when inside tmux), or
+			'none'. When inline display is unavailable the cell
+			shows a text note instead.
+
+							*cmdline_notebook_figure_size*
+cmdline_notebook_figure_size  Inline figure width in terminal columns, capped
+			to the window width. Default: 60.
+
+							*cmdline_notebook_figure_dpi*
+cmdline_notebook_figure_dpi  Resolution (matplotlib dpi) the kernel renders
+			inline figures at. Default: 100.
+
+							*cmdline_notebook_figure_cell_aspect*
+cmdline_notebook_figure_cell_aspect  Terminal cell height/width ratio used to
+			compute the inline figure's rows from its pixel
+			aspect. Default: 2.0.
+
 							*cmdline_notebook_exec_marker*
 cmdline_notebook_exec_marker  When 1 (default), mark each executed cell with
 			"✓ [N]" ("✗ [N]" on error), where N is the kernel

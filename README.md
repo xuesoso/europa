@@ -153,6 +153,26 @@ the kernel execution count — embedded in the output box's top border, or shown
 as a single rule line (`─── ✓ [N] ───`) for cells with no output, so they still
 show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 
+### Inline figures (kitty graphics)
+
+By default figures render in [plotty]'s tmux pane. Alternatively, matplotlib
+figures can be drawn **inside the cell's output box** using the kitty graphics
+protocol (the same Unicode-placeholder mechanism as plotty's kitty renderer,
+so it survives tmux and SSH):
+
+```vim
+let cmdline_notebook_figures     = 'inline'
+let cmdline_notebook_figure_size = 60     " width in terminal columns
+let cmdline_notebook_figure_dpi  = 100    " render resolution
+```
+
+Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
+`:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
+Sixel cannot be used here — it cannot be anchored to buffer cells, which is
+exactly why plotty renders sixel in a dedicated pane. When inline display is
+unavailable the cell shows a text note instead; set
+`cmdline_notebook_figures = 'plotty'` (default) to keep the pane workflow.
+
 You don't have to toggle notebook mode on by hand: any cell-exec command
 (`ExecCell`, `ExecCellJumpNext`, `ExecAllCells`, `ExecAllCellsBelow`)
 auto-enables it and starts the kernel when the feature is on, the filetype has
@@ -308,6 +328,10 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 | `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
+| `cmdline_notebook_figures` | `'plotty'` | Figure routing: `'plotty'` (tmux pane), `'inline'` (kitty graphics drawn inside the cell output), or `'none'` |
+| `cmdline_notebook_figure_size` | `60` | Inline figure width in terminal columns (capped to the window) |
+| `cmdline_notebook_figure_dpi` | `100` | Resolution the kernel renders figures at (matplotlib dpi) |
+| `cmdline_notebook_figure_cell_aspect` | `2.0` | Terminal cell height/width ratio used to keep the figure's aspect |
 
 ```vim
 let cmdline_notebook_enable       = 1

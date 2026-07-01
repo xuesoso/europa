@@ -10,6 +10,10 @@ cmdline_notebook_border	europa.txt	/*cmdline_notebook_border*
 cmdline_notebook_border_color	europa.txt	/*cmdline_notebook_border_color*
 cmdline_notebook_enable	europa.txt	/*cmdline_notebook_enable*
 cmdline_notebook_exec_marker	europa.txt	/*cmdline_notebook_exec_marker*
+cmdline_notebook_figure_cell_aspect	europa.txt	/*cmdline_notebook_figure_cell_aspect*
+cmdline_notebook_figure_dpi	europa.txt	/*cmdline_notebook_figure_dpi*
+cmdline_notebook_figure_size	europa.txt	/*cmdline_notebook_figure_size*
+cmdline_notebook_figures	europa.txt	/*cmdline_notebook_figures*
 cmdline_notebook_kernel_name	europa.txt	/*cmdline_notebook_kernel_name*
 cmdline_notebook_kernel_timeout	europa.txt	/*cmdline_notebook_kernel_timeout*
 cmdline_notebook_max_lines	europa.txt	/*cmdline_notebook_max_lines*

@@ -4,6 +4,7 @@ local config = require('vimcmdline.notebook.config')
 local health = require('vimcmdline.notebook.health')
 local bridge = require('vimcmdline.notebook.bridge')
 local render = require('vimcmdline.notebook.render')
+local image = require('vimcmdline.notebook.image')
 
 local M = {}
 
@@ -140,11 +141,18 @@ function M.start(bufnr)
     return false
   end
   b.handle = handle
+  local inline_ok = cfg.figures == 'inline' and image.supported() or false
+  if cfg.figures == 'inline' and not inline_ok then
+    local _, why = image.supported()
+    notify((why or 'inline figures unavailable') .. ' — falling back to text', vim.log.levels.WARN)
+  end
   handle.send({
     type = 'hello',
     startup_code = config.build_startup(cfg),
     kernel_name = cfg.kernel_name,
     timeout = cfg.kernel_timeout,
+    inline_images = inline_ok,
+    image_dir = cfg.tmp_dir,
   })
   notify('starting Python kernel…')
   setup_autocmds(bufnr)
@@ -267,7 +275,18 @@ function M._on_event(bufnr, ev)
       render.add(bufnr, ev.cell_id, 'result', ev.text)
     end
   elseif t == 'display_data' then
-    if ev.text and ev.text ~= '' then
+    if ev.image_path then
+      -- Inline figure: the bridge saved the PNG; transmit it via the kitty
+      -- graphics protocol and place its placeholder grid in the cell output.
+      local img, ierr = image.show(ev.image_path, ev.image_w, ev.image_h,
+                                   b.cfg.figure_size, b.cfg.figure_cell_aspect)
+      if img then
+        render.add_image(bufnr, ev.cell_id, img)
+      else
+        render.add(bufnr, ev.cell_id, 'info',
+                   '[figure not displayed: ' .. (ierr or 'unknown error') .. ']')
+      end
+    elseif ev.text and ev.text ~= '' then
       render.add(bufnr, ev.cell_id, 'result', ev.text)
     elseif ev.has_image then
       render.add(bufnr, ev.cell_id, 'info', '[matplotlib figure → plotty pane]')

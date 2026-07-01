@@ -1,4 +1,6 @@
 -- Inline output rendering via extmark virtual lines, one mark per executed cell.
+local image = require('vimcmdline.notebook.image')
+
 local M = {}
 
 M.ns = vim.api.nvim_create_namespace('vimcmdline_notebook')
@@ -41,25 +43,42 @@ local function seg_append(seg, text)
 end
 
 -- Flatten accumulated segments into a list of {text, hlgroup} screen lines.
+-- Inline-figure segments contribute their placeholder grid rows, tagged with
+-- img=true so downstream stages skip truncation/syntax-highlighting for them.
 local function flatten(c)
   local out = {}
   for _, seg in ipairs(c.segments) do
-    local group = HL[seg.kind] or HL.stdout
-    local raw = seg.raw
-    -- A segment ending in a newline has a trailing '' — skip it so the next
-    -- segment is not preceded by a spurious blank line.
-    local n = #raw
-    if n > 1 and raw[n] == '' then
-      n = n - 1
-    end
-    for i = 1, n do
-      out[#out + 1] = { raw[i], group }
+    if seg.kind == 'image' then
+      for _, row in ipairs(seg.image.rows) do
+        out[#out + 1] = { row, seg.image.hl, img = true }
+      end
+    else
+      local group = HL[seg.kind] or HL.stdout
+      local raw = seg.raw
+      -- A segment ending in a newline has a trailing '' — skip it so the next
+      -- segment is not preceded by a spurious blank line.
+      local n = #raw
+      if n > 1 and raw[n] == '' then
+        n = n - 1
+      end
+      for i = 1, n do
+        out[#out + 1] = { raw[i], group }
+      end
     end
   end
   while #out > 0 and out[#out][1] == '' do
     table.remove(out)
   end
   return out
+end
+
+-- Free terminal-side image placements owned by a cell (about to be dropped).
+local function free_cell_images(c)
+  for _, seg in ipairs(c.segments) do
+    if seg.kind == 'image' then
+      image.free(seg.image.id)
+    end
+  end
 end
 
 -- ft -> scratch bufnr, reused across redraws to color output text with the
@@ -236,7 +255,7 @@ end
 -- Color a content line's text per `ft`'s syntax, unless it is one of our own
 -- plugin notices (drawn in HL.info) rather than actual kernel output.
 local function content_runs(l, ft)
-  if not ft or l[2] == HL.info then
+  if not ft or l.img or l[2] == HL.info then
     return { { l[1], l[2] } }
   end
   return ft_highlight_line(ft, l[1], l[2])
@@ -252,7 +271,7 @@ local function prefill_hl(ft, texts)
   local jobs
   for _, t in ipairs(texts) do
     local text, fallback = t[1], t[2]
-    if text ~= '' and fallback ~= HL.info then
+    if text ~= '' and fallback ~= HL.info and not t.img then
       local key = hl_key(ft, fallback, text)
       if not hl_cache[key] then
         jobs = jobs or {}
@@ -322,9 +341,15 @@ local function build_virt(lines, border, title, ft)
 
   -- Truncate every line up front, then batch-highlight the truncated texts
   -- (truncation changes the text, so the cache key is the truncated form).
+  -- Placeholder grid rows are never truncated: their width is already capped
+  -- by fit(), and cutting one would corrupt the figure.
   local shown = {}
   for i, l in ipairs(lines) do
-    shown[i] = { trunc(l[1], width), l[2] }
+    if l.img then
+      shown[i] = l
+    else
+      shown[i] = { trunc(l[1], width), l[2] }
+    end
   end
   prefill_hl(ft, shown)
 
@@ -355,15 +380,26 @@ local function redraw(bufnr, cell_id)
   local lines = flatten(c)
   local max = c.max_lines
   if max and max > 0 and #lines > max then
-    local kept = {}
-    for i = 1, max - 1 do
-      kept[i] = lines[i]
+    -- Cap counts TEXT lines only: figure rows are kept regardless (cutting a
+    -- placeholder grid mid-figure would corrupt the image).
+    local kept, ntext, dropped = {}, 0, 0
+    for _, l in ipairs(lines) do
+      if l.img then
+        kept[#kept + 1] = l
+      elseif ntext < max - 1 then
+        ntext = ntext + 1
+        kept[#kept + 1] = l
+      else
+        dropped = dropped + 1
+      end
     end
-    kept[#kept + 1] = {
-      ('… %d more lines (:CmdLineNotebookOpenOutput)'):format(#lines - (max - 1)),
-      HL.info,
-    }
-    lines = kept
+    if dropped > 0 then
+      kept[#kept + 1] = {
+        ('… %d more lines (:CmdLineNotebookOpenOutput)'):format(dropped),
+        HL.info,
+      }
+      lines = kept
+    end
   end
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
   -- embedded in the top border for cells with output, or as a single rule line
@@ -436,8 +472,10 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
   -- Drop stored output for any earlier run whose range overlaps this one, so
   -- re-running a cell REPLACES its output instead of leaving a stale run that
   -- find_cell() could return (and so cell state does not grow unbounded).
+  -- Terminal-side image placements owned by dropped runs are freed.
   for id, c in pairs(s.cells) do
     if c.start_line <= end_line and c.end_line >= start_line then
+      free_cell_images(c)
       s.cells[id] = nil
     end
   end
@@ -491,6 +529,18 @@ function M.add(bufnr, cell_id, kind, text)
   schedule(bufnr, cell_id)
 end
 
+-- Append an inline figure (already transmitted to the terminal by image.lua):
+-- img = {id=..., rows={placeholder row texts}, cols=..., hl=...}.
+function M.add_image(bufnr, cell_id, img)
+  local c = cell(bufnr, cell_id)
+  if not c then
+    image.free(img.id)  -- cell vanished between event and render
+    return
+  end
+  c.segments[#c.segments + 1] = { kind = 'image', image = img }
+  schedule(bufnr, cell_id)
+end
+
 -- Force an immediate redraw (called on idle / execute_reply).
 function M.finish(bufnr, cell_id)
   local c = cell(bufnr, cell_id)
@@ -504,6 +554,9 @@ end
 function M.clear_all(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, 0, -1)
   if state[bufnr] then
+    for _, c in pairs(state[bufnr].cells) do
+      free_cell_images(c)
+    end
     state[bufnr].cells = {}
   end
 end
@@ -514,6 +567,7 @@ function M.clear_range(bufnr, start_line, end_line)
   if s then
     for id, c in pairs(s.cells) do
       if c.end_line >= start_line and c.end_line <= end_line then
+        free_cell_images(c)
         s.cells[id] = nil
       end
     end
@@ -538,14 +592,25 @@ local function find_cell(bufnr, start_line, end_line)
 end
 
 -- Full (untruncated) output text for the cell in a line range, as a list.
+-- Inline figures are represented by a one-line note (placeholder glyphs are
+-- meaningless outside their highlighted virt_lines).
 function M.get_range_text(bufnr, start_line, end_line)
   local c = find_cell(bufnr, start_line, end_line)
   if not c then
     return nil
   end
   local out = {}
+  local last_img
   for _, l in ipairs(flatten(c)) do
-    out[#out + 1] = l[1]
+    if l.img then
+      if l[2] ~= last_img then  -- one note per figure, not per grid row
+        out[#out + 1] = '[inline figure]'
+        last_img = l[2]
+      end
+    else
+      out[#out + 1] = l[1]
+      last_img = nil
+    end
   end
   return out
 end

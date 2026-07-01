@@ -13,7 +13,8 @@ interaction with the kernel client; a separate thread only reads stdin and
 enqueues requests. This keeps all zmq socket access single-threaded.
 
 Requests (stdin, one JSON object per line):
-    {"type":"hello","startup_code":[...],"kernel_name":"python3","timeout":30}
+    {"type":"hello","startup_code":[...],"kernel_name":"python3","timeout":30,
+     "inline_images":false,"image_dir":"/tmp/..."}
     {"type":"execute","cell_id":<int>,"code":"<source>"}
     {"type":"complete","req_id":<int>,"code":"<source>","cursor_pos":<int>}
     {"type":"interrupt"}
@@ -29,6 +30,8 @@ Events (stdout, one JSON object per line):
     {"type":"stream","name":"stdout"|"stderr","text":"...","cell_id":<int>}
     {"type":"execute_result","text":"...","execution_count":<int|null>,"cell_id":<int>}
     {"type":"display_data","text":"...","has_image":<bool>,"cell_id":<int>}
+        ... with "image_path","image_w","image_h" added when inline_images is
+        on and the payload carried an image/png the bridge saved to image_dir.
     {"type":"error","ename":"...","evalue":"...","traceback":[...],"cell_id":<int>}
     {"type":"execute_reply","status":"ok"|"error","execution_count":<int|null>,"cell_id":<int>}
     {"type":"complete_reply","req_id":<int>,"matches":[...],"cursor_start":<int>,"cursor_end":<int>,"status":"ok"|"error"}
@@ -53,6 +56,14 @@ def strip_ansi(text):
     return _ANSI_RE.sub("", text or "")
 
 
+def png_size(data):
+    """(width, height) from a PNG IHDR header, or None. (From plotty.)"""
+    import struct
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return struct.unpack(">II", data[16:24])
+
+
 def emit(obj):
     """Write one protocol event to stdout (thread-safe)."""
     line = json.dumps(obj, ensure_ascii=False)
@@ -72,6 +83,12 @@ class Bridge:
         self.kernel_name = "python3"
         self.timeout = 30
         self.startup_code = []
+        # Inline figures: when on, image/png display_data payloads are decoded
+        # and written to image_dir; the event carries the file path + pixel
+        # size instead of shipping pixels through NDJSON.
+        self.inline_images = False
+        self.image_dir = None
+        self._image_seq = 0
         # parent msg_id -> cell_id; only the kernel thread touches this.
         self._cell_by_msgid = OrderedDict()
         # parent msg_id -> completion req_id (for complete_request round-trips).
@@ -240,6 +257,8 @@ class Bridge:
         self.startup_code = req.get("startup_code", []) or []
         self.kernel_name = req.get("kernel_name", "python3") or "python3"
         self.timeout = req.get("timeout", 30) or 30
+        self.inline_images = bool(req.get("inline_images"))
+        self.image_dir = req.get("image_dir") or None
         try:
             from jupyter_client import KernelManager
         except Exception as exc:
@@ -346,6 +365,26 @@ class Bridge:
 
     # -- message handling ------------------------------------------------
 
+    def _save_png(self, b64, cell_id):
+        """Decode a base64 image/png payload to image_dir; returns
+        (path, width, height) or None. Never raises."""
+        try:
+            import base64
+            png = base64.standard_b64decode(b64)
+            size = png_size(png)
+            if not size:
+                return None
+            os.makedirs(self.image_dir, exist_ok=True)
+            self._image_seq += 1
+            path = os.path.join(self.image_dir,
+                                "vcl_fig_%d_%d.png" % (cell_id, self._image_seq))
+            with open(path, "wb") as f:
+                f.write(png)
+            return path, size[0], size[1]
+        except Exception as exc:
+            log("saving inline image failed:", exc)
+            return None
+
     def _cell_for(self, parent_id):
         return self._cell_by_msgid.get(parent_id)
 
@@ -373,10 +412,15 @@ class Bridge:
                   "cell_id": cell_id})
         elif mtype == "display_data":
             data = content.get("data", {})
-            emit({"type": "display_data",
+            ev = {"type": "display_data",
                   "text": data.get("text/plain", ""),
                   "has_image": any(k.startswith("image/") for k in data),
-                  "cell_id": cell_id})
+                  "cell_id": cell_id}
+            if self.inline_images and self.image_dir and "image/png" in data:
+                saved = self._save_png(data["image/png"], cell_id)
+                if saved:
+                    ev["image_path"], ev["image_w"], ev["image_h"] = saved
+            emit(ev)
         elif mtype == "error":
             emit({"type": "error",
                   "ename": content.get("ename", ""),

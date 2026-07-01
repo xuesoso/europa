@@ -26,6 +26,18 @@ function M.read()
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
   cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))
+  -- Figure routing: 'plotty' (tmux pane, the default), 'inline' (kitty
+  -- graphics in the cell output), or 'none'. When unset, derive from the
+  -- legacy cmdline_notebook_plotty flag so existing configs keep working.
+  local figures = gget('cmdline_notebook_figures', '')
+  if figures ~= 'plotty' and figures ~= 'inline' and figures ~= 'none' then
+    figures = cfg.plotty and 'plotty' or 'none'
+  end
+  cfg.figures = figures
+  cfg.figure_size = tonumber(gget('cmdline_notebook_figure_size', 60)) or 60
+  cfg.figure_dpi = tonumber(gget('cmdline_notebook_figure_dpi', 100)) or 100
+  cfg.figure_cell_aspect = tonumber(gget('cmdline_notebook_figure_cell_aspect', 2.0)) or 2.0
+  cfg.tmp_dir = gget('cmdline_tmp_dir', '/tmp')
   if type(cfg.python) ~= 'string' or cfg.python == '' then
     cfg.python = 'python3'
   end
@@ -36,11 +48,28 @@ end
 -- wrapped in try/except so a missing plotty never breaks the session.
 function M.build_startup(cfg)
   local startup = {}
-  if cfg.plotty then
+  if cfg.figures == 'plotty' then
     table.insert(startup, table.concat({
       'try:',
       '    import plotty as _vcl_plotty',
       '    _vcl_plotty.enable()',
+      'except Exception:',
+      '    pass',
+    }, '\n'))
+  elseif cfg.figures == 'inline' then
+    -- The matplotlib_inline backend (ships with ipykernel) makes figures
+    -- arrive as display_data image/png; the bridge saves them and the Lua
+    -- side draws them in the cell output. dpi is set after the magic since
+    -- the inline backend applies its own rc overrides on activation.
+    table.insert(startup, table.concat({
+      'try:',
+      '    from IPython import get_ipython as _vcl_gi',
+      '    _vcl_ip = _vcl_gi()',
+      '    if _vcl_ip is not None:',
+      "        _vcl_ip.run_line_magic('matplotlib', 'inline')",
+      '    import matplotlib as _vcl_mpl',
+      "    _vcl_mpl.rcParams['figure.dpi'] = " .. cfg.figure_dpi,
+      "    _vcl_mpl.rcParams['savefig.dpi'] = " .. cfg.figure_dpi,
       'except Exception:',
       '    pass',
     }, '\n'))
