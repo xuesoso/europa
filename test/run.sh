@@ -28,6 +28,12 @@ echo "== notebook render: re-run replaces output (regression) =="
 echo "== notebook render: run marker / aborted cell (regression) =="
 "$NVIM" --headless -u NONE -N -l test/render_marker.lua || rc=1
 
+echo "== notebook render: re-run refreshes inline output (regression) =="
+"$NVIM" --headless -u NONE -N -l test/render_rerun.lua || rc=1
+
+echo "== notebook render: perf benchmark + output correctness =="
+"$NVIM" --headless -u NONE -N -l test/bench_render.lua || rc=1
+
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1
 

@@ -25,12 +25,26 @@ local function cell(bufnr, cell_id)
   return s and s.cells[cell_id] or nil
 end
 
+-- A segment stores its output as a list of appended chunks (seg.chunks) rather
+-- than one growing string, so streaming N chunks is N O(1) inserts instead of
+-- N string copies (the old `text = text .. chunk` was O(N^2)). The joined text
+-- is computed lazily and memoised in seg.text, invalidated whenever a chunk is
+-- appended, so flatten() joins each segment at most once per redraw.
+local function seg_text(seg)
+  local t = seg.text
+  if t == nil then
+    t = table.concat(seg.chunks)
+    seg.text = t
+  end
+  return t
+end
+
 -- Flatten accumulated segments into a list of {text, hlgroup} screen lines.
 local function flatten(c)
   local out = {}
   for _, seg in ipairs(c.segments) do
     local group = HL[seg.kind] or HL.stdout
-    local parts = vim.split(seg.text, '\n', { plain = true })
+    local parts = vim.split(seg_text(seg), '\n', { plain = true })
     -- A segment ending in a newline yields a trailing "" — drop it so the next
     -- segment is not preceded by a spurious blank line.
     if #parts > 1 and parts[#parts] == '' then
@@ -63,6 +77,19 @@ local function get_syntax_buf(ft)
   return buf
 end
 
+-- Highlight-run cache. Keyed by ft \0 fallback_hl \0 text; the value is the list
+-- of {chunk, hlgroup} runs. Every redraw re-highlights ALL of a cell's output
+-- lines, and while a cell streams the earlier lines recur unchanged on each
+-- redraw, so the same (ft, text) is highlighted over and over — caching turns
+-- those repeats into a table lookup. Runs depend only on the syntax rules, not
+-- on colours, so a :colorscheme change (which only recolours existing groups)
+-- never invalidates them. Bounded by a hard cap: when exceeded the whole cache
+-- is dropped (cheap, and streaming's ever-growing partial lines would otherwise
+-- accrete stale one-shot keys).
+local hl_cache = {}
+local hl_cache_n = 0
+local HL_CACHE_MAX = 4096
+
 -- Split `text` into {chunk, hlgroup} runs following filetype `ft`'s :syntax
 -- highlighting. Falls back to a single `fallback_hl` run when `ft` is empty
 -- or has no syntax definitions (e.g. plain stdout with no filetype).
@@ -70,22 +97,30 @@ local function ft_highlight_line(ft, text, fallback_hl)
   if not ft or ft == '' or text == '' then
     return { { text, fallback_hl } }
   end
+  local key = ft .. '\0' .. fallback_hl .. '\0' .. text
+  local hit = hl_cache[key]
+  if hit then
+    return hit
+  end
   if vim.g.syntax_on ~= 1 then
     pcall(vim.cmd, 'syntax enable')
   end
   local buf = get_syntax_buf(ft)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
   local runs = {}
+  -- Hoist the vim.fn lookups out of the per-column loop: vim.fn.<name> resolves
+  -- through a metatable on each access, which adds up over one call per column.
+  local synID, synIDtrans, synIDattr = vim.fn.synID, vim.fn.synIDtrans, vim.fn.synIDattr
   local ok = pcall(vim.api.nvim_buf_call, buf, function()
     vim.cmd('syntax sync fromstart')
     local len = #text
     local col = 0
     while col < len do
-      local name = vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, col + 1, 1)), 'name')
+      local name = synIDattr(synIDtrans(synID(1, col + 1, 1)), 'name')
       local start_col = col
       col = col + 1
       while col < len do
-        local name2 = vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.synID(1, col + 1, 1)), 'name')
+        local name2 = synIDattr(synIDtrans(synID(1, col + 1, 1)), 'name')
         if name2 ~= name then break end
         col = col + 1
       end
@@ -93,8 +128,14 @@ local function ft_highlight_line(ft, text, fallback_hl)
     end
   end)
   if not ok or #runs == 0 then
-    return { { text, fallback_hl } }
+    runs = { { text, fallback_hl } }
   end
+  if hl_cache_n >= HL_CACHE_MAX then
+    hl_cache = {}
+    hl_cache_n = 0
+  end
+  hl_cache[key] = runs
+  hl_cache_n = hl_cache_n + 1
   return runs
 end
 
@@ -336,9 +377,10 @@ function M.add(bufnr, cell_id, kind, text)
   end
   local last = c.segments[#c.segments]
   if last and last.kind == kind then
-    last.text = last.text .. text
+    last.chunks[#last.chunks + 1] = text
+    last.text = nil  -- invalidate the memoised join
   else
-    c.segments[#c.segments + 1] = { kind = kind, text = text }
+    c.segments[#c.segments + 1] = { kind = kind, chunks = { text } }
   end
   schedule(bufnr, cell_id)
 end
