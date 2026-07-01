@@ -81,14 +81,22 @@ These are also available as commands and <Plug> mappings, for binding your
 own keys without a raw ":call Func()<CR>": >
 	:CmdLineExecCell            <Plug>(cmdline-exec-cell)
 	:CmdLineExecCellJumpNext    <Plug>(cmdline-exec-cell-jump-next)
+	:CmdLineExecAllCells        <Plug>(cmdline-exec-all-cells)
+	:CmdLineExecAllCellsBelow   <Plug>(cmdline-exec-all-cells-below)
 	:CmdLineExecToEnd           <Plug>(cmdline-exec-to-end)
 	:CmdLineNextCell            <Plug>(cmdline-next-cell)
 	:CmdLinePrevCell            <Plug>(cmdline-prev-cell)
 <
+ExecAllCells runs every cell top to bottom; ExecAllCellsBelow runs the cell
+under the cursor and every cell below it. Both skip whitespace-only cells and
+restore the cursor when done. Neither has a default key mapping: bind the
+<Plug> mappings above yourself if you want one.
+
 A count prefix (e.g. "3<Plug>(cmdline-next-cell)") moves/executes N cells for
-ExecCellJumpNext/NextCell/PrevCell. ExecCell/ExecToEnd always run once
-regardless of a count, since a count re-running the same cell N times would
-just duplicate its side effects rather than doing anything useful.
+ExecCellJumpNext/NextCell/PrevCell. ExecCell/ExecToEnd/ExecAllCells/
+ExecAllCellsBelow always run once regardless of a count, since a count
+re-running the same cells N times would just duplicate their side effects
+rather than doing anything useful.
 Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
 	,k			Toggle notebook mode (start/stop the kernel)
 	,K			Clear the output under the current cell
@@ -230,6 +238,16 @@ Enable it in your |vimrc|: >
 Then toggle it in a buffer with |<LocalLeader>k| (or :CmdLineNotebookToggle).
 While on, the cell mappings (|vimcmdline_mappings|) and the send mappings run
 through the kernel and render output inline instead of to a REPL.
+
+You do not have to toggle notebook mode on by hand: any cell-exec command
+(ExecCell, ExecCellJumpNext, ExecAllCells, ExecAllCellsBelow) auto-enables it
+and starts the kernel when the feature is on (|cmdline_notebook_enable|), the
+filetype has an interpreter, and no classic REPL is already running for it (a
+live REPL wins). If notebook mode is already on but no kernel is attached
+(never started, stopped, or crashed), the same commands start one before
+sending. Cells submitted while the kernel is still booting are queued and run
+once it is ready. Repeated exec commands (including key-repeat) never launch a
+second kernel.
 
 Commands: >
 	:CmdLineNotebookToggle      toggle notebook mode (start/stop kernel)

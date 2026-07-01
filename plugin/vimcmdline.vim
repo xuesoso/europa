@@ -542,8 +542,42 @@ endfunction
 " Route a cell's lines to its sink: the inline notebook kernel when notebook
 " mode is on for this buffer, otherwise the classic REPL via b:cmdline_source_fun.
 " a:endline is the buffer line the output is anchored under in notebook mode.
+" Whether a cell should auto-enable notebook mode when it is currently off:
+" the notebook feature is enabled, the filetype has an interpreter defined, and
+" no classic REPL is already running for it (a live REPL wins — we don't yank
+" the buffer out from under it).
+function! s:ShouldAutoNotebook()
+    if !(has('nvim') && get(g:, 'cmdline_notebook_enable', 0))
+        return 0
+    endif
+    if !exists('b:cmdline_app')
+        return 0
+    endif
+    if exists('b:cmdline_filetype') && has_key(g:cmdline_job, b:cmdline_filetype)
+                \ && g:cmdline_job[b:cmdline_filetype] != 0
+        return 0
+    endif
+    return 1
+endfunction
+
 function! s:CmdLineCellSink(lines, endline)
+    " Notebook mode off but nothing else is claiming this buffer: opt in
+    " automatically so a bare :CmdLineExecCell brings up the kernel instead of
+    " erroring, no manual toggle required. start() below (or set_flag on
+    " failure) keeps b:cmdline_notebook honest.
+    if !get(b:, 'cmdline_notebook', 0) && s:ShouldAutoNotebook()
+        let b:cmdline_notebook = 1
+    endif
     if get(b:, 'cmdline_notebook', 0)
+        " Notebook mode is on but no kernel is attached (never started, stopped,
+        " or crashed): bring one up before sending. start() is idempotent — it
+        " returns early when a handle already exists — so rapid key-repeat exec
+        " commands can never spawn a second kernel. Cells submitted while the
+        " kernel is still booting are queued by execute_cell() and flushed on
+        " kernel_ready, so nothing is lost.
+        if !v:lua.require'vimcmdline.notebook'.is_active(bufnr('%'))
+            call v:lua.require'vimcmdline.notebook'.start(bufnr('%'))
+        endif
         call v:lua.require'vimcmdline.notebook'.execute_cell(bufnr('%'), a:endline, a:lines)
     else
         call b:cmdline_source_fun(a:lines)
@@ -582,10 +616,46 @@ function! ExecuteCurrentCodeBlockJumpNext()
     endwhile
 endfunction
 
+" Execute every cell from a:startline's block down to the end of the buffer,
+" top to bottom. Cursor is parked back where it started when done. Whitespace-
+" only cells are skipped so an empty leading/trailing block is not sent to the
+" kernel. Any count is ignored: "run everything" has one meaning. In notebook
+" mode all cells are dispatched immediately and run in submission order (the
+" kernel queues them); the classic REPL receives them back to back.
+function! s:ExecuteCodeBlocksFrom(startline)
+    let l:save = getpos('.')
+    call cursor(a:startline, 1)
+    while 1
+        let l:start = LastCodeBlock() + 1
+        let l:end = s:CurrentBlockEnd()
+        let l:lines = getline(l:start, l:end)
+        if join(l:lines, '') !~ '^\s*$'
+            call s:CmdLineCellSink(l:lines, l:end)
+        endif
+        if l:end >= line('$')
+            break
+        endif
+        call s:StepNextCodeBlock()
+    endwhile
+    call setpos('.', l:save)
+endfunction
+
+" Run all cells in the buffer, top to bottom.
+function! ExecuteAllCodeBlocks()
+    call s:ExecuteCodeBlocksFrom(1)
+endfunction
+
+" Run the cell under the cursor and every cell below it.
+function! ExecuteAllCodeBlocksBelow()
+    call s:ExecuteCodeBlocksFrom(line('.'))
+endfunction
+
 " :command! entry points, so cell exec/navigation is reachable without a raw
 " ":call Func()<CR>" and shows up in ":CmdLine<Tab>" completion.
 command! CmdLineExecCell         call ExecuteCurrentCodeBlock()
 command! CmdLineExecCellJumpNext call ExecuteCurrentCodeBlockJumpNext()
+command! CmdLineExecAllCells     call ExecuteAllCodeBlocks()
+command! CmdLineExecAllCellsBelow call ExecuteAllCodeBlocksBelow()
 command! CmdLineExecToEnd        call ExecuteToEndCodeBlock()
 command! CmdLineNextCell         call ToNextCodeBlock()
 command! CmdLinePrevCell         call ToLastCodeBlock()
@@ -598,6 +668,8 @@ command! CmdLinePrevCell         call ToLastCodeBlock()
 " and invoking the function once per line in that range.
 nnoremap <silent> <Plug>(cmdline-exec-cell)           <Cmd>call ExecuteCurrentCodeBlock()<CR>
 nnoremap <silent> <Plug>(cmdline-exec-cell-jump-next) <Cmd>call ExecuteCurrentCodeBlockJumpNext()<CR>
+nnoremap <silent> <Plug>(cmdline-exec-all-cells)      <Cmd>call ExecuteAllCodeBlocks()<CR>
+nnoremap <silent> <Plug>(cmdline-exec-all-cells-below) <Cmd>call ExecuteAllCodeBlocksBelow()<CR>
 nnoremap <silent> <Plug>(cmdline-exec-to-end)         <Cmd>call ExecuteToEndCodeBlock()<CR>
 nnoremap <silent> <Plug>(cmdline-next-cell)           <Cmd>call ToNextCodeBlock()<CR>
 nnoremap <silent> <Plug>(cmdline-prev-cell)           <Cmd>call ToLastCodeBlock()<CR>

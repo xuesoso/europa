@@ -153,6 +153,15 @@ the kernel execution count — embedded in the output box's top border, or shown
 as a single rule line (`─── ✓ [N] ───`) for cells with no output, so they still
 show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 
+You don't have to toggle notebook mode on by hand: any cell-exec command
+(`ExecCell`, `ExecCellJumpNext`, `ExecAllCells`, `ExecAllCellsBelow`)
+auto-enables it and starts the kernel when the feature is on, the filetype has
+an interpreter, and no classic REPL is already running (a live REPL wins). If
+notebook mode is already on but no kernel is attached (never started, stopped,
+or crashed), the same commands start one before sending; cells submitted while
+it boots are queued and run once ready. Repeated exec commands — including
+key-repeat — never launch a second kernel.
+
 Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
 `:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
@@ -230,14 +239,21 @@ so you don't have to hardcode `:call Func()<CR>` to bind your own keys:
 |---|---|---|
 | `:CmdLineExecCell` | `<Plug>(cmdline-exec-cell)` | Execute the current cell |
 | `:CmdLineExecCellJumpNext` | `<Plug>(cmdline-exec-cell-jump-next)` | Execute the current cell, jump to the next |
+| `:CmdLineExecAllCells` | `<Plug>(cmdline-exec-all-cells)` | Execute all cells, top to bottom |
+| `:CmdLineExecAllCellsBelow` | `<Plug>(cmdline-exec-all-cells-below)` | Execute the current cell and every cell below it |
 | `:CmdLineExecToEnd` | `<Plug>(cmdline-exec-to-end)` | Execute from the cursor to the end of the cell |
 | `:CmdLineNextCell` | `<Plug>(cmdline-next-cell)` | Jump to the next cell |
 | `:CmdLinePrevCell` | `<Plug>(cmdline-prev-cell)` | Jump to the previous cell |
 
+`ExecAllCells` runs every cell top to bottom; `ExecAllCellsBelow` runs the cell
+under the cursor and every cell below it. Both skip whitespace-only cells and
+restore the cursor when done. Neither has a default key mapping — bind the
+`<Plug>` mappings above if you want one.
+
 A count prefix (e.g. `3<Plug>(cmdline-next-cell)`) moves/executes N cells for
-`ExecCellJumpNext`/`NextCell`/`PrevCell`; `ExecCell`/`ExecToEnd` always run
-once regardless of a count, since re-running the same cell N times would just
-duplicate its side effects.
+`ExecCellJumpNext`/`NextCell`/`PrevCell`; `ExecCell`/`ExecToEnd`/`ExecAllCells`/
+`ExecAllCellsBelow` always run once regardless of a count, since re-running the
+same cells N times would just duplicate their side effects.
 
 ### General options
 
