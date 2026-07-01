@@ -289,7 +289,11 @@ function M._on_event(bufnr, ev)
     elseif ev.text and ev.text ~= '' then
       render.add(bufnr, ev.cell_id, 'result', ev.text)
     elseif ev.has_image then
-      render.add(bufnr, ev.cell_id, 'info', '[matplotlib figure → plotty pane]')
+      -- Only claim the plotty pane when that is actually the configured
+      -- route; otherwise (e.g. inline requested but unsupported) be honest.
+      local note = b.cfg.figures == 'plotty' and '[matplotlib figure → plotty pane]'
+        or '[figure not displayed inline]'
+      render.add(bufnr, ev.cell_id, 'info', note)
     end
   elseif t == 'error' then
     local tb = ev.traceback or {}

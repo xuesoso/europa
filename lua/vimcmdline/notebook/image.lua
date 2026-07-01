@@ -166,6 +166,32 @@ function M.fit(iw, ih, want_cols, cell_aspect)
   return cols, rows
 end
 
+-- Nested-tmux detection: the passthrough envelope survives exactly ONE tmux
+-- hop — the inner tmux unwraps it and the outer tmux then discards the bare
+-- APC, so the placeholder grid would render as a blank rectangle. From inside
+-- the inner session, `#{client_termname}` is the terminal the inner tmux is
+-- attached to: a tmux/screen TERM there means that client is itself a
+-- multiplexer. Cached per session; overridable for tests.
+local nested_cache = nil
+
+function M._set_nested(v)
+  nested_cache = v
+end
+
+function M.in_nested_tmux()
+  if (vim.env.TMUX or '') == '' then
+    return false
+  end
+  if nested_cache ~= nil then
+    return nested_cache
+  end
+  local out = vim.fn.system({ 'tmux', 'display-message', '-p', '#{client_termname}' })
+  nested_cache = vim.v.shell_error == 0
+    and (out:match('^tmux') ~= nil or out:match('^screen') ~= nil)
+    or false
+  return nested_cache
+end
+
 -- Capability gate for inline figures. Placeholders need the id in the RGB
 -- foreground, hence 'termguicolors'. The terminal itself must speak the kitty
 -- graphics protocol (kitty/ghostty) — not probeable without a tty round-trip,
@@ -176,6 +202,10 @@ function M.supported()
   end
   if not vim.o.termguicolors then
     return false, 'inline figures need :set termguicolors'
+  end
+  if M.in_nested_tmux() then
+    return false, 'inline figures cannot pass through nested tmux'
+        .. " (use cmdline_notebook_figures='plotty')"
   end
   return true, nil
 end

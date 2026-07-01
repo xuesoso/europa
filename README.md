@@ -169,9 +169,13 @@ let cmdline_notebook_figure_dpi  = 100    " render resolution
 Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
 `:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
 Sixel cannot be used here — it cannot be anchored to buffer cells, which is
-exactly why plotty renders sixel in a dedicated pane. When inline display is
-unavailable the cell shows a text note instead; set
-`cmdline_notebook_figures = 'plotty'` (default) to keep the pane workflow.
+exactly why plotty renders sixel in a dedicated pane. **Nested tmux is not
+supported** (the passthrough envelope survives only one tmux hop); europa
+detects nesting, warns once at kernel start, and shows a text note instead of
+a blank figure — use `cmdline_notebook_figures = 'plotty'` there (plotty's
+sixel pane works in nested tmux with `terminal-features ',*:sixel'` on both
+layers). When inline display is unavailable for any reason the cell shows a
+text note instead. Check `:checkhealth europa`.
 
 You don't have to toggle notebook mode on by hand: any cell-exec command
 (`ExecCell`, `ExecCellJumpNext`, `ExecAllCells`, `ExecAllCellsBelow`)

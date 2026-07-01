@@ -323,8 +323,10 @@ cmdline_notebook_figures  Where matplotlib figures render: 'plotty' (default;
 			inside the cell's output box — needs a kitty-protocol
 			terminal such as kitty/ghostty, 'termguicolors', and
 			tmux `allow-passthrough on` when inside tmux), or
-			'none'. When inline display is unavailable the cell
-			shows a text note instead.
+			'none'. Nested tmux is not supported: europa detects
+			it, warns at kernel start, and falls back to a text
+			note (use 'plotty' there). When inline display is
+			unavailable the cell shows a text note instead.
 
 							*cmdline_notebook_figure_size*
 cmdline_notebook_figure_size  Inline figure width in terminal columns, capped

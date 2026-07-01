@@ -42,6 +42,23 @@ function M.check()
   else
     info('not inside tmux; plotty images need tmux + a sixel/kitty terminal')
   end
+
+  start('inline figures (cmdline_notebook_figures = "inline")')
+  local image = require('vimcmdline.notebook.image')
+  local sup, why = image.supported()
+  if sup then
+    ok('inline figure prerequisites met (kitty/ghostty terminal still required)')
+  else
+    warn(why .. ' — figures fall back to a text note')
+  end
+  if vim.env.TMUX and vim.env.TMUX ~= '' and not image.in_nested_tmux() then
+    local pt = vim.fn.system({ 'tmux', 'show', '-g', 'allow-passthrough' })
+    if pt:find('on') then
+      ok('tmux allow-passthrough is on')
+    else
+      warn('tmux allow-passthrough is off — run: tmux set -g allow-passthrough on')
+    end
+  end
 end
 
 return M

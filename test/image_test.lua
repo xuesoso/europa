@@ -78,6 +78,20 @@ do
   check('hl_fg_is_id', hl.fg, 0x00ABCD)
 end
 
+-- Nested tmux: supported() must refuse (blank-figure prevention) and show()
+-- must fail with the reason, so the caller renders a text note instead.
+do
+  img._set_nested(true)
+  local sup, why = img.supported()
+  check('nested_unsupported', sup, false)
+  check('nested_reason', why and why:find('nested tmux', 1, true) ~= nil, true)
+  local shown, serr = img.show('/nonexistent.png', 100, 100, 10, 2.0)
+  check('nested_show_fails', shown, nil)
+  check('nested_show_reason', serr and serr:find('nested tmux', 1, true) ~= nil, true)
+  img._set_nested(false)
+  check('unnested_supported', (img.supported()), true)
+end
+
 -- ---- golden comparison against plotty's Python encoder -----------------
 
 local plotty_src = vim.env.PLOTTY_SRC or (vim.env.HOME .. '/GitRepositories/plotty/src')
