@@ -62,6 +62,10 @@ let g:cmdline_notebook_figures = get(g:, 'cmdline_notebook_figures', '')
 let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 60)
 let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 100)
 let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cell_aspect', 2.0)
+" Explicit inline-figure height in rows; 0 (default) derives the height from
+" the image's aspect ratio. Both size options apply live: changing them (or
+" running :CmdLineNotebookFigureSize) re-renders figures already on screen.
+let g:cmdline_notebook_figure_rows = get(g:, 'cmdline_notebook_figure_rows', 0)
 let g:cmdline_notebook_airline_section = get(g:, 'cmdline_notebook_airline_section', 'x')
 
 " Internal variables
@@ -824,6 +828,38 @@ if has('nvim') && g:cmdline_notebook_enable
     command! CmdLineNotebookClear      call VimCmdLineNotebookClear()
     command! CmdLineNotebookClearAll   call v:lua.require'vimcmdline.notebook'.clear_all_output(bufnr('%'))
     command! CmdLineNotebookOpenOutput call VimCmdLineNotebookOpenOutput()
+
+    " Change the inline-figure display size live: width in columns, optional
+    " height in rows (omitted/0 = keep the image's aspect ratio). Figures
+    " already on screen are re-transmitted and redrawn at the new size.
+    let s:fig_watch_suppress = 0
+    function! VimCmdLineNotebookFigureSize(width, ...) abort
+        let l:w = str2nr(a:width)
+        if l:w <= 0
+            echohl WarningMsg | echomsg 'europa: usage :CmdLineNotebookFigureSize {width} [{height}]' | echohl Normal
+            return
+        endif
+        " Suppress the var watchers while setting both values, then refresh
+        " once (avoids a transient resize between the two assignments).
+        let s:fig_watch_suppress = 1
+        let g:cmdline_notebook_figure_size = l:w
+        let g:cmdline_notebook_figure_rows = a:0 > 0 ? str2nr(a:1) : 0
+        let s:fig_watch_suppress = 0
+        call v:lua.require'vimcmdline.notebook'.refresh_figures()
+    endfunction
+    command! -nargs=+ CmdLineNotebookFigureSize call VimCmdLineNotebookFigureSize(<f-args>)
+
+    " Also react to direct `let g:cmdline_notebook_figure_*` assignments so
+    " the options behave live without the command. Refresh is idempotent:
+    " figures whose geometry does not change are left untouched.
+    function! s:CmdLineNotebookFigureWatch(...) abort
+        if !s:fig_watch_suppress
+            call v:lua.require'vimcmdline.notebook'.refresh_figures()
+        endif
+    endfunction
+    silent! call dictwatcheradd(g:, 'cmdline_notebook_figure_size', function('s:CmdLineNotebookFigureWatch'))
+    silent! call dictwatcheradd(g:, 'cmdline_notebook_figure_rows', function('s:CmdLineNotebookFigureWatch'))
+    silent! call dictwatcheradd(g:, 'cmdline_notebook_figure_cell_aspect', function('s:CmdLineNotebookFigureWatch'))
 
     " Statusline segment: empty unless notebook mode is on for this buffer.
     function! VimCmdLineNotebookStatus() abort

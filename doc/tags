@@ -1,3 +1,4 @@
+:CmdLineNotebookFigureSize	europa.txt	/*:CmdLineNotebookFigureSize*
 cmdline_app	europa.txt	/*cmdline_app*
 cmdline_auto_scroll	europa.txt	/*cmdline_auto_scroll*
 cmdline_block_sep	europa.txt	/*cmdline_block_sep*
@@ -12,6 +13,7 @@ cmdline_notebook_enable	europa.txt	/*cmdline_notebook_enable*
 cmdline_notebook_exec_marker	europa.txt	/*cmdline_notebook_exec_marker*
 cmdline_notebook_figure_cell_aspect	europa.txt	/*cmdline_notebook_figure_cell_aspect*
 cmdline_notebook_figure_dpi	europa.txt	/*cmdline_notebook_figure_dpi*
+cmdline_notebook_figure_rows	europa.txt	/*cmdline_notebook_figure_rows*
 cmdline_notebook_figure_size	europa.txt	/*cmdline_notebook_figure_size*
 cmdline_notebook_figures	europa.txt	/*cmdline_notebook_figures*
 cmdline_notebook_kernel_name	europa.txt	/*cmdline_notebook_kernel_name*

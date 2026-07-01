@@ -330,7 +330,20 @@ cmdline_notebook_figures  Where matplotlib figures render: 'plotty' (default;
 
 							*cmdline_notebook_figure_size*
 cmdline_notebook_figure_size  Inline figure width in terminal columns, capped
-			to the window width. Default: 60.
+			to the window width. Default: 60. Applies LIVE:
+			changing it (or :CmdLineNotebookFigureSize) re-renders
+			figures already on screen; text output is untouched.
+
+							*cmdline_notebook_figure_rows*
+cmdline_notebook_figure_rows  Explicit inline figure height in rows; 0
+			(default) derives the height from the image's aspect
+			ratio. Applies live, like the width.
+
+							*:CmdLineNotebookFigureSize*
+:CmdLineNotebookFigureSize {width} [{height}]
+			Set the inline figure width (columns) and optionally
+			height (rows; omitted = keep aspect), then re-transmit
+			and redraw every figure currently on screen.
 
 							*cmdline_notebook_figure_dpi*
 cmdline_notebook_figure_dpi  Resolution (matplotlib dpi) the kernel renders

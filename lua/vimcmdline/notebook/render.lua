@@ -544,6 +544,43 @@ function M.add_image(bufnr, cell_id, img)
   schedule(bufnr, cell_id)
 end
 
+-- Re-fit every displayed figure in `bufnr` to a new size and redraw the cells
+-- that changed. Text segments are not touched — only image segments are
+-- re-transmitted/re-gridded. Returns the number of figures resized.
+function M.resize_images(bufnr, want_cols, cell_aspect, want_rows)
+  local s = state[bufnr]
+  if not s then
+    return 0
+  end
+  local n = 0
+  for cell_id, c in pairs(s.cells) do
+    local changed = false
+    for _, seg in ipairs(c.segments) do
+      if seg.kind == 'image' and image.resize(seg.image, want_cols, cell_aspect, want_rows) then
+        changed = true
+        n = n + 1
+      end
+    end
+    if changed then
+      redraw(bufnr, cell_id)
+    end
+  end
+  return n
+end
+
+-- Resize figures across EVERY buffer render.lua knows about (a figure stays
+-- resizable even after its kernel stopped, since the PNG bytes live on the
+-- segment). Returns the number of figures resized.
+function M.resize_all_images(want_cols, cell_aspect, want_rows)
+  local n = 0
+  for bufnr in pairs(state) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      n = n + M.resize_images(bufnr, want_cols, cell_aspect, want_rows)
+    end
+  end
+  return n
+end
+
 -- Force an immediate redraw (called on idle / execute_reply).
 function M.finish(bufnr, cell_id)
   local c = cell(bufnr, cell_id)

@@ -170,12 +170,18 @@ function M.hl_for_id(iid)
 end
 
 -- Fit an image of iw x ih pixels into `want_cols` columns (terminal-capped),
--- assuming a cell is `cell_aspect` times taller than wide. Returns cols, rows.
-function M.fit(iw, ih, want_cols, cell_aspect)
+-- assuming a cell is `cell_aspect` times taller than wide. A positive
+-- `want_rows` overrides the aspect-derived height (the terminal scales the
+-- image into the cols x rows box, so an explicit height may distort).
+-- Returns cols, rows.
+function M.fit(iw, ih, want_cols, cell_aspect, want_rows)
   local max_cols = math.min(math.max((vim.o.columns or 80) - 6, 4), M.MAX_CELLS)
-  local cols = math.max(1, math.min(want_cols, max_cols))
-  local rows = math.max(1, math.floor(cols * (ih / iw) / cell_aspect + 0.5))
   local max_rows = math.min(math.max((vim.o.lines or 24) - 2, 1), M.MAX_CELLS)
+  local cols = math.max(1, math.min(want_cols, max_cols))
+  if want_rows and want_rows > 0 then
+    return cols, math.max(1, math.min(want_rows, max_rows))
+  end
+  local rows = math.max(1, math.floor(cols * (ih / iw) / cell_aspect + 0.5))
   if rows > max_rows then
     cols = math.max(1, math.floor(cols * max_rows / rows + 0.5))
     rows = max_rows
@@ -228,9 +234,11 @@ function M.supported()
 end
 
 -- Show `png_path` inline: allocate an id, transmit to the terminal, delete the
--- temp PNG, and return {id=..., rows={row_text...}, hl=...} for render.lua to
--- place as virt_lines, or nil, errmsg.
-function M.show(png_path, iw, ih, want_cols, cell_aspect)
+-- temp PNG, and return {id=..., rows={row_text...}, cols=..., hl=..., png=...,
+-- iw=..., ih=...} for render.lua to place as virt_lines, or nil, errmsg. The
+-- PNG bytes are kept on the handle so the figure can be re-transmitted at a
+-- different size later (live resize).
+function M.show(png_path, iw, ih, want_cols, cell_aspect, want_rows)
   local ok, err = M.supported()
   if not ok then
     return nil, err
@@ -242,7 +250,7 @@ function M.show(png_path, iw, ih, want_cols, cell_aspect)
   local png = f:read('*a')
   f:close()
   os.remove(png_path)  -- transmitted from memory; the temp file is done
-  local cols, rows = M.fit(iw, ih, want_cols, cell_aspect)
+  local cols, rows = M.fit(iw, ih, want_cols, cell_aspect, want_rows)
   local iid = next_id()
   local wrap = (vim.env.TMUX or '') ~= ''
   if not write_tty(M.transmission_bytes(iid, png, cols, rows, wrap)) then
@@ -252,7 +260,33 @@ function M.show(png_path, iw, ih, want_cols, cell_aspect)
   for r = 0, rows - 1 do
     grid[#grid + 1] = M.placeholder_row(r, cols)
   end
-  return { id = iid, rows = grid, cols = cols, hl = M.hl_for_id(iid) }
+  return { id = iid, rows = grid, cols = cols, hl = M.hl_for_id(iid),
+           png = png, iw = iw, ih = ih }
+end
+
+-- Re-transmit an already-shown figure at a new size, reusing its image id
+-- (the transmission stream starts with a delete APC for that id, so the
+-- terminal replaces the placement). Mutates img.rows/cols in place; returns
+-- true when the geometry changed.
+function M.resize(img, want_cols, cell_aspect, want_rows)
+  if not (img and img.png) then
+    return false
+  end
+  local cols, rows = M.fit(img.iw, img.ih, want_cols, cell_aspect, want_rows)
+  if cols == img.cols and rows == #img.rows then
+    return false
+  end
+  local wrap = (vim.env.TMUX or '') ~= ''
+  if not write_tty(M.transmission_bytes(img.id, img.png, cols, rows, wrap)) then
+    return false
+  end
+  local grid = {}
+  for r = 0, rows - 1 do
+    grid[#grid + 1] = M.placeholder_row(r, cols)
+  end
+  img.rows = grid
+  img.cols = cols
+  return true
 end
 
 -- Free a transmitted image in the terminal (cell cleared / re-run / wiped).

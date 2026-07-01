@@ -166,6 +166,13 @@ let cmdline_notebook_figure_size = 60     " width in terminal columns
 let cmdline_notebook_figure_dpi  = 100    " render resolution
 ```
 
+Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
+[{height}]` (height in rows; omit it to keep the image's aspect ratio)
+re-transmits every figure already on screen at the new size and redraws it —
+text output is untouched. Assigning `g:cmdline_notebook_figure_size` /
+`g:cmdline_notebook_figure_rows` / `g:cmdline_notebook_figure_cell_aspect`
+directly has the same effect.
+
 Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
 `:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
 Sixel cannot be used here — it cannot be anchored to buffer cells, which is
@@ -333,9 +340,10 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 | `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
 | `cmdline_notebook_figures` | `'plotty'` | Figure routing: `'plotty'` (tmux pane), `'inline'` (kitty graphics drawn inside the cell output), or `'none'` |
-| `cmdline_notebook_figure_size` | `60` | Inline figure width in terminal columns (capped to the window) |
+| `cmdline_notebook_figure_size` | `60` | Inline figure width in terminal columns (capped to the window); applies live |
+| `cmdline_notebook_figure_rows` | `0` | Explicit inline figure height in rows; `0` keeps the image's aspect ratio; applies live |
 | `cmdline_notebook_figure_dpi` | `100` | Resolution the kernel renders figures at (matplotlib dpi) |
-| `cmdline_notebook_figure_cell_aspect` | `2.0` | Terminal cell height/width ratio used to keep the figure's aspect |
+| `cmdline_notebook_figure_cell_aspect` | `2.0` | Terminal cell height/width ratio used to keep the figure's aspect; applies live |
 
 ```vim
 let cmdline_notebook_enable       = 1

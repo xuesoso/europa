@@ -35,6 +35,7 @@ function M.read()
   end
   cfg.figures = figures
   cfg.figure_size = tonumber(gget('cmdline_notebook_figure_size', 60)) or 60
+  cfg.figure_rows = tonumber(gget('cmdline_notebook_figure_rows', 0)) or 0
   cfg.figure_dpi = tonumber(gget('cmdline_notebook_figure_dpi', 100)) or 100
   cfg.figure_cell_aspect = tonumber(gget('cmdline_notebook_figure_cell_aspect', 2.0)) or 2.0
   cfg.tmp_dir = gget('cmdline_tmp_dir', '/tmp')

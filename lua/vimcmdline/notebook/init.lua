@@ -279,7 +279,8 @@ function M._on_event(bufnr, ev)
       -- Inline figure: the bridge saved the PNG; transmit it via the kitty
       -- graphics protocol and place its placeholder grid in the cell output.
       local img, ierr = image.show(ev.image_path, ev.image_w, ev.image_h,
-                                   b.cfg.figure_size, b.cfg.figure_cell_aspect)
+                                   b.cfg.figure_size, b.cfg.figure_cell_aspect,
+                                   b.cfg.figure_rows)
       if img then
         render.add_image(bufnr, ev.cell_id, img)
       else
@@ -338,6 +339,28 @@ function M._on_exit(bufnr, code)
   end
   set_flag(bufnr, 0)
   refresh_status()
+end
+
+-- Apply the CURRENT g:cmdline_notebook_figure_* values to every active
+-- notebook buffer: displayed figures are re-transmitted at the new size and
+-- their cells redrawn (text output untouched); future figures use the new
+-- values too. Called by :CmdLineNotebookFigureSize and the g: var watchers.
+function M.refresh_figures()
+  local cfg = config.read()
+  -- Future figures in active kernels pick up the new values...
+  for _, b in pairs(buffers) do
+    b.cfg.figure_size = cfg.figure_size
+    b.cfg.figure_rows = cfg.figure_rows
+    b.cfg.figure_cell_aspect = cfg.figure_cell_aspect
+  end
+  -- ...and every figure already on screen is re-fitted (render.lua tracks
+  -- them independently of kernel lifetime).
+  local n = render.resize_all_images(cfg.figure_size, cfg.figure_cell_aspect,
+                                     cfg.figure_rows)
+  if n > 0 then
+    notify(('resized %d figure%s'):format(n, n == 1 and '' or 's'))
+  end
+  return n
 end
 
 function M.clear_cell(bufnr, start_line, end_line)
