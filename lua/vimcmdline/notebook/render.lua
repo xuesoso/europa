@@ -863,6 +863,8 @@ end
 -- an ordered list of {kind='text', lines={...}} and {kind='image', png=...,
 -- iw=..., ih=...} chunks (image chunks carry the retained PNG bytes so the
 -- popup can make its own, larger placement). nil when no cell matches.
+-- Second return: the number of lines elided by the retention cap (0 when
+-- nothing was dropped), so the popup can surface it visibly.
 function M.get_range_output(bufnr, start_line, end_line)
   local c = find_cell(bufnr, start_line, end_line)
   if not c then
@@ -890,7 +892,7 @@ function M.get_range_output(bufnr, start_line, end_line)
       end
     end
   end
-  return out
+  return out, c.dropped or 0
 end
 
 -- Full (untruncated) output text for the cell in a line range, as a list.

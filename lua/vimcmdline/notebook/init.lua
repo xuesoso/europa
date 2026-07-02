@@ -389,7 +389,7 @@ end
 
 function M.open_output(bufnr, start_line, end_line)
   bufnr = resolve(bufnr)
-  local chunks = render.get_range_output(bufnr, start_line, end_line)
+  local chunks, elided = render.get_range_output(bufnr, start_line, end_line)
   if not chunks or #chunks == 0 then
     notify('no output for this cell')
     return
@@ -431,6 +431,14 @@ function M.open_output(bufnr, start_line, end_line)
   if #text == 0 then
     notify('no output for this cell')
     return
+  end
+  -- Elided output: the in-place "··· N lines elided ···" marker sits in the
+  -- MIDDLE of a large buffer where nobody scrolls to — add an explicit footer
+  -- at the end (and, for the float, the count in the title) so the truncation
+  -- is visible at a glance.
+  if elided and elided > 0 then
+    text[#text + 1] = ('··· %d lines elided from the middle of this output'
+      .. ' (cmdline_notebook_max_kept_lines) ···'):format(elided)
   end
 
   local obuf = vim.api.nvim_create_buf(false, true)
@@ -491,7 +499,9 @@ function M.open_output(bufnr, start_line, end_line)
     col = math.floor((cols - width) / 2),
     style = 'minimal',
     border = WIN_BORDER[cfg.border] or 'rounded',
-    title = ' cell output ',
+    title = (elided and elided > 0)
+      and (' cell output (%d lines elided) '):format(elided)
+      or ' cell output ',
     title_pos = 'center',
   })
   vim.wo[win].wrap = true

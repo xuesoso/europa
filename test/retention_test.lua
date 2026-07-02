@@ -285,6 +285,37 @@ do
   check('notice_count_exact', n, retained - 9)
 end
 
+-- ---- (6b) popup surfaces the elision visibly --------------------------------
+do
+  local nb = require('vimcmdline.notebook')
+  vim.g.cmdline_notebook_enable = 1
+  vim.cmd('set rtp^=.')
+  pcall(vim.cmd, 'source plugin/vimcmdline.vim')
+  render.clear_all(buf)
+  vim.api.nvim_set_current_buf(buf)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '# %%', 'loop()' })
+  render.begin(buf, 5501, 2, 2, 20, 'rounded', true, nil, 40)
+  for i = 1, 200 do render.add(buf, 5501, 'stdout', ('P%d\n'):format(i)) end
+  render.finish(buf, 5501)
+  vim.fn.cursor(2, 1)
+  nb.open_output(buf, 2, 2)
+  local owin = vim.api.nvim_get_current_win()
+  local ob = vim.api.nvim_win_get_buf(owin)
+  local plines = vim.api.nvim_buf_get_lines(ob, 0, -1, false)
+  check('popup_footer_elided', plines[#plines]:match('lines elided from the middle') ~= nil, true)
+  local mid = 0
+  for _, l in ipairs(plines) do
+    if l:match('^··· %d+ lines elided ···$') then mid = mid + 1 end
+  end
+  check('popup_middle_marker', mid, 1)
+  local wcfg = vim.api.nvim_win_get_config(owin)
+  local title = ''
+  for _, part in ipairs(wcfg.title or {}) do title = title .. part[1] end
+  check('popup_title_elided', title:match('lines elided') ~= nil, true)
+  vim.cmd('bwipeout!')
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'x = 1' })
+end
+
 -- ---- (7) complexity: streaming cost stays flat ------------------------------
 do
   render.clear_all(buf)
