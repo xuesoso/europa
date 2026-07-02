@@ -809,6 +809,46 @@ function M.resize_all_images(want_cols, cell_aspect, want_rows)
   return n
 end
 
+-- Re-transmit every retained figure at its current geometry, restoring
+-- placements the terminal evicted (blank rectangles). The placeholder text is
+-- unchanged, so no cell redraw is needed. Returns the number retransmitted.
+--
+-- Terminals evict OLDEST images first when over their graphics quota, so the
+-- transmission ORDER decides which figures survive when the retained set is
+-- larger than the quota: other buffers go first, then `priority_bufnr`'s
+-- figures ordered farthest-from-`cursor_line` first — the figures nearest the
+-- cursor are transmitted last and therefore evicted last.
+function M.refresh_all_images(priority_bufnr, cursor_line)
+  local jobs = {}
+  for bufnr in pairs(state) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      for _, c in pairs(state[bufnr].cells) do
+        for _, seg in ipairs(seg_walk(c)) do
+          if seg.kind == 'image' then
+            local dist
+            if bufnr == priority_bufnr and cursor_line then
+              dist = math.abs(c.end_line - cursor_line)
+            else
+              dist = math.huge  -- other buffers: least priority, sent first
+            end
+            jobs[#jobs + 1] = { img = seg.image, dist = dist }
+          end
+        end
+      end
+    end
+  end
+  table.sort(jobs, function(a, b)
+    return a.dist > b.dist
+  end)
+  local n = 0
+  for _, job in ipairs(jobs) do
+    if image.retransmit(job.img) then
+      n = n + 1
+    end
+  end
+  return n
+end
+
 -- Force an immediate redraw (called on idle / execute_reply).
 function M.finish(bufnr, cell_id)
   local c = cell(bufnr, cell_id)

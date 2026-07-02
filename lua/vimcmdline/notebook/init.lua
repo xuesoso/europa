@@ -363,6 +363,26 @@ function M.refresh_figures()
   return n
 end
 
+-- Re-transmit every retained figure at its current geometry — restores plots
+-- the terminal evicted to stay within its graphics quota (blank rectangles).
+function M.retransmit_figures()
+  -- Cursor-near figures are transmitted last => evicted last if the retained
+  -- set still exceeds the terminal's graphics quota.
+  local n = render.refresh_all_images(vim.api.nvim_get_current_buf(),
+                                      vim.api.nvim_win_get_cursor(0)[1])
+  if n > 0 then
+    -- Repaint so the terminal re-composes the placeholder cells. Only with a
+    -- UI attached: headless :redraw! can crash nvim (and is pointless there).
+    if #vim.api.nvim_list_uis() > 0 then
+      pcall(vim.cmd, 'redraw!')
+    end
+    notify(('refreshed %d figure%s'):format(n, n == 1 and '' or 's'))
+  else
+    notify('no figures to refresh')
+  end
+  return n
+end
+
 function M.clear_cell(bufnr, start_line, end_line)
   render.clear_range(resolve(bufnr), start_line, end_line)
 end

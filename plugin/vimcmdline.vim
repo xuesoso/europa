@@ -863,6 +863,10 @@ if has('nvim') && g:cmdline_notebook_enable
     endfunction
     command! -nargs=+ CmdLineNotebookFigureSize call VimCmdLineNotebookFigureSize(<f-args>)
 
+    " Re-transmit every retained figure at its current size — restores plots
+    " the terminal evicted from its graphics memory (blank rectangles).
+    command! CmdLineNotebookFigureRefresh call v:lua.require'vimcmdline.notebook'.retransmit_figures()
+
     " Also react to direct `let g:cmdline_notebook_figure_*` assignments so
     " the options behave live without the command. Refresh is idempotent:
     " figures whose geometry does not change are left untouched.

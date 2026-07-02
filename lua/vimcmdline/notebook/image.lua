@@ -322,6 +322,19 @@ function M.resize(img, want_cols, cell_aspect, want_rows)
   return true
 end
 
+-- Re-transmit an already-shown figure at its CURRENT geometry: restores a
+-- placement the terminal evicted to stay within its graphics quota (kitty
+-- deletes oldest images past ~320MB, leaving the placeholder grid blank).
+-- The PNG bytes are retained on the handle, so nothing is recomputed.
+function M.retransmit(img)
+  if not (img and img.png) then
+    return false
+  end
+  local wrap = (vim.env.TMUX or '') ~= ''
+  local ok = write_tty(M.transmission_bytes(img.id, img.png, img.cols, #img.rows, wrap))
+  return ok == true
+end
+
 -- Free a transmitted image in the terminal (cell cleared / re-run / wiped).
 function M.free(iid)
   if not iid then

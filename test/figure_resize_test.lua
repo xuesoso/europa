@@ -129,6 +129,42 @@ vim.cmd('CmdLineNotebookFigureSize 30 9')
 vim.wait(100, function() return false end, 20)
 check('noop_no_retransmit', #writes, 0)
 
+-- 3b) FigureRefresh re-transmits at the CURRENT geometry (restores terminal-
+-- evicted placements): same id, same size, and repeatable — unlike the
+-- same-size FigureSize call above, which is deliberately a no-op.
+writes = {}
+vim.cmd('CmdLineNotebookFigureRefresh')
+check('refresh_retransmits', #writes, 1)
+check('refresh_same_id',
+  writes[1] ~= nil and writes[1]:find('i=' .. orig_id, 1, true) ~= nil, true)
+check('refresh_same_geometry',
+  writes[1] ~= nil and writes[1]:find(',c=30,r=9', 1, true) ~= nil, true)
+writes = {}
+vim.cmd('CmdLineNotebookFigureRefresh')
+check('refresh_repeatable', #writes, 1)
+
+-- 3c) Refresh order is quota-aware: with a second figure in a far-away cell,
+-- the figure NEAREST the cursor is transmitted LAST (terminals evict oldest
+-- first, so the nearest survives when over quota).
+vim.api.nvim_set_current_buf(buf)  -- priority ordering keys off the current buffer
+vim.api.nvim_buf_set_lines(buf, 0, -1, false,
+  { '# %%', 'plot()', '# %%', 'far()', '', '', '', '', '', '# %%', 'near()' })
+render.begin(buf, 50, 4, 4, 50, 'rounded', true, nil)
+local pf3 = vim.fn.tempname()
+local f3 = io.open(pf3, 'wb'); f3:write(png); f3:close()
+local far_fig = img.show(pf3, 400, 300, 10, 2.0)
+render.add_image(buf, 50, far_fig)
+vim.fn.cursor(2, 1)  -- cursor at the first cell => its figure is "near"
+writes = {}
+vim.cmd('CmdLineNotebookFigureRefresh')
+check('refresh_order_count', #writes, 2)
+check('refresh_far_first',
+  writes[1] ~= nil and writes[1]:find('i=' .. far_fig.id, 1, true) ~= nil, true)
+check('refresh_near_last',
+  writes[2] ~= nil and writes[2]:find('i=' .. orig_id, 1, true) ~= nil, true)
+render.clear_range(buf, 4, 4)
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '# %%', 'plot()' })
+
 -- 4) OpenOutput text is still the figure note + text (no placeholders).
 local txt = render.get_range_text(buf, 2, 2)
 check('open_output_intact', vim.deep_equal(txt,

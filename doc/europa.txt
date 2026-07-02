@@ -375,6 +375,20 @@ cmdline_notebook_figure_rows  Explicit inline figure height in rows; 0
 			height (rows; omitted = keep aspect), then re-transmit
 			and redraw every figure currently on screen.
 
+							*:CmdLineNotebookFigureRefresh*
+:CmdLineNotebookFigureRefresh
+			Re-transmit every retained figure at its current size.
+			Terminals cap their graphics memory (kitty ~320MB) and
+			evict the oldest images, leaving blank rectangles; the
+			PNGs are retained editor-side, so this restores them.
+			Figures are sent in cursor-priority order (other
+			buffers first, current buffer nearest-to-cursor LAST):
+			if the retained set exceeds the terminal's quota, the
+			figures around the cursor survive and far-away ones
+			blank out — no command can make the terminal hold more
+			than its quota; reduce figure dpi/size or clear old
+			cells to fit everything.
+
 							*cmdline_notebook_figure_dpi*
 cmdline_notebook_figure_dpi  Resolution (matplotlib dpi) the kernel renders
 			inline figures at. Default: 200.

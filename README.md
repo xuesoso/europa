@@ -194,6 +194,18 @@ version of the plot** in the output popup (sized to ~85% of the editor width,
 same rendered resolution), alongside the cell's full text output; it is freed
 when the popup closes.
 
+Terminals cap their graphics memory (kitty: ~320MB, oldest images evicted), so
+after many large plots the **oldest figures can turn into blank rectangles**.
+The PNGs are retained on the editor side — run `:CmdLineNotebookFigureRefresh`
+to re-transmit them at their current size. Figures are sent in
+**cursor-priority order** (other buffers first, then the current buffer,
+nearest-to-cursor last), so when the retained set is *larger than the
+terminal's quota* the figures around your cursor are the ones that survive —
+the terminal physically cannot hold more than its quota, so far-away figures
+blank out first. To keep everything visible at once, lower
+`cmdline_notebook_figure_dpi`, use smaller figures, or clear cells you no
+longer need (`,K` / `:CmdLineNotebookClearAll`).
+
 Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
 `:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
 Sixel cannot be used here — it cannot be anchored to buffer cells, which is
