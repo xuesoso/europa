@@ -6,6 +6,12 @@
 "   nvim --headless -u NONE -N -S test/codeblock.vim
 
 set rtp^=.
+" This test isolates the # %% block *range* logic (which lines a cell spans);
+" that computation is identical for the REPL and notebook sinks. Pin notebook
+" mode OFF (it now defaults on) so ExecuteCurrentCodeBlock() routes to
+" b:cmdline_source_fun (FakeSource) and the captured lines are observable.
+" Auto-enable/kernel routing is covered separately by offpath.vim.
+let g:cmdline_notebook_enable = 0
 source plugin/vimcmdline.vim
 let g:cmdline_block_sep = '# %%'
 

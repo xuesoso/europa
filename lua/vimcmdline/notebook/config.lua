@@ -16,7 +16,7 @@ end
 
 function M.read()
   local cfg = {}
-  cfg.enable = gget('cmdline_notebook_enable', 0)
+  cfg.enable = gget('cmdline_notebook_enable', 1)
   cfg.plotty = truthy(gget('cmdline_notebook_plotty', 1))
   cfg.startup_code = gget('cmdline_notebook_startup_code', {})
   cfg.python = gget('cmdline_notebook_python', '')

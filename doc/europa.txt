@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.2.0
+Version:         2.3.0
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -217,39 +217,41 @@ See the README for the full list of cmdline_color_* options and examples.
 7. Notebook mode					*vimcmdline-notebook*
 							*vimcmdline_notebook*
 
-Notebook mode is an optional, toggleable alternative to the REPL transports
-(Neovim only, Python only). Each code block (|vimcmdline_blocks|) is run by a
-headless Jupyter (ipykernel) kernel and its TEXT output is shown inline,
-directly under the cell, using virtual lines. Matplotlib figures are drawn
-INLINE in the same output box by default (kitty graphics; survives tmux and
-SSH); alternatively they can render in the plotty package's own tmux pane
-(https://github.com/xuesoso/plotty) — see |cmdline_notebook_figures|.
+Notebook mode is ON by default (Neovim only, Python only). Each code block
+(|vimcmdline_blocks|) is run by a headless Jupyter (ipykernel) kernel and its
+TEXT output is shown inline, directly under the cell, using virtual lines.
+Matplotlib figures are drawn INLINE in the same output box by default (kitty
+graphics; survives tmux and SSH); alternatively they can render in the plotty
+package's own tmux pane (https://github.com/xuesoso/plotty) — see
+|cmdline_notebook_figures|.
 
-The mode is off by default and changes no existing behavior. Run
-:checkhealth europa to verify prerequisites.
+The mode is on by default; set cmdline_notebook_enable = 0 for classic
+REPL-only behavior. Run :checkhealth europa to verify prerequisites.
 
 Requirements:
   - Neovim 0.10+.
   - Python with jupyter_client and ipykernel:
       pip install jupyter_client ipykernel
-  - For inline figures (the default): a kitty-graphics terminal (kitty or
-    ghostty), 'termguicolors', and inside tmux (>= 3.3)
-    `set -g allow-passthrough on`.
+  - For inline figures (the default): a terminal that speaks the kitty
+    graphics protocol (kitty, ghostty, WezTerm), 'termguicolors', and inside
+    tmux (>= 3.3) `set -g allow-passthrough on`.
   - For the plotty pane instead: pip install plotty, and run inside tmux
     (>= 3.4) in a sixel/kitty-capable terminal.
 
-NOTE: terminals WITHOUT kitty graphics (sixel-only: xterm, foot, Konsole,
-WezTerm, ...) cannot display inline figures — cells show a
-"[figure not displayed: ...]" note instead. Set >
+NOTE: any terminal that speaks the kitty graphics protocol (kitty, ghostty,
+WezTerm, ...) can display inline figures; terminals without it (e.g. xterm,
+foot, Konsole) show a "[figure not displayed: ...]" note instead. Nested tmux
+carries images only over sixel, so it needs the plotty pane too. Set >
 	let cmdline_notebook_figures = 'plotty'
 <to route figures to plotty's tmux pane, which works on sixel terminals (this
 was the default before 'inline' became the default).
 
-Enable it in your |vimrc|: >
-	let cmdline_notebook_enable = 1
+It is on by default; run a cell and the kernel starts automatically. To turn
+it off (classic REPL only), set in your |vimrc|: >
+	let cmdline_notebook_enable = 0
 <
-Then toggle it in a buffer with |<LocalLeader>k| (or :CmdLineNotebookToggle).
-While on, the cell mappings (|vimcmdline_mappings|) and the send mappings run
+Toggle it per buffer with |<LocalLeader>k| (or :CmdLineNotebookToggle). While
+on, the cell mappings (|vimcmdline_mappings|) and the send mappings run
 through the kernel and render output inline instead of to a REPL.
 
 You do not have to toggle notebook mode on by hand: any cell-exec command
@@ -276,9 +278,10 @@ Commands: >
 <
 Options:
 							*cmdline_notebook_enable*
-cmdline_notebook_enable   Master switch for notebook mode. When 0 (default),
-			none of the commands, mappings, or autocommands are
-			defined and behavior is unchanged.
+cmdline_notebook_enable   Master switch for notebook mode (Neovim). Default 1
+			(on). When 0, none of the commands, mappings, or
+			autocommands are defined and behavior is classic REPL
+			only.
 
 							*cmdline_notebook_python*
 cmdline_notebook_python   Python executable that runs the kernel bridge (must

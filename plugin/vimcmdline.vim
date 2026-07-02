@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.2.0
+" Version: 2.3.0
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.2.0"
+let g:cmdline_version = "2.3.0"
 
 " Set option
 if has("nvim")
@@ -44,7 +44,10 @@ let g:cmdline_auto_scroll = get(g:, 'cmdline_auto_scroll', 1)
 let g:cmdline_block_sep = get(g:, 'cmdline_block_sep', '# %%')
 
 " Notebook mode options (Neovim only; see :help vimcmdline-notebook)
-let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 0)
+" On by default: running a cell (,c) in Neovim starts a Jupyter kernel and
+" renders output inline. Set to 0 for classic REPL-only behavior. A live REPL
+" still wins per buffer, so `,s` then the send keys stay pure REPL.
+let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 1)
 " Figure routing: 'inline' (default; kitty graphics drawn in the cell output —
 " needs kitty/ghostty + termguicolors), 'plotty' (tmux pane), or 'none'. When
 " unset, an EXPLICIT legacy g:cmdline_notebook_plotty still wins for

@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.2.0-blue)
+![version](https://img.shields.io/badge/version-2.3.0-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -34,12 +34,18 @@ emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output
 
 ## Highlights
 
-  - **Notebook mode** — run cells through a Jupyter kernel and see text output
-    inline, in a rounded, colorable box ([details](#notebook-mode-neovim--python)).
+  - **Notebook mode by default** (Neovim + Python) — run `# %%` cells through a
+    Jupyter kernel and see text output inline, in a rounded, colorable box
+    ([details](#notebook-mode-neovim--python)).
+  - **Inline image output** — matplotlib figures render inline under the cell
+    via the kitty graphics protocol, and keep working **over SSH and inside
+    tmux** ([details](#inline-figures-kitty-graphics)).
+  - **Runaway-output guard** — a cell that floods output cannot grow memory or
+    stutter the editor; output is capped and elided with an exact marker
+    ([details](#runaway-output-protection)).
   - **Live column/key completion** — in notebook mode, feed pandas DataFrame
     columns and dict keys from the running kernel into [blink.cmp]
     ([details](#column--key-completion)).
-  - **Code blocks / cells** — execute and navigate `# %%`-delimited cells.
   - **Multi-language REPL** — send lines/paragraphs/files to 18 interpreters.
   - **`,` key prefix** by default; set [`cmdline_default_keybindings`](#key-mappings)
     to keep the original `<LocalLeader>` prefix.
@@ -54,64 +60,85 @@ files to your `~/.vim` or `~/.config/nvim` directory.
 Plug 'xuesoso/europa'
 ```
 
+## Quick start (inline images)
+
+Notebook mode is **on by default** on Neovim, so for Python there is nothing to
+enable — open a file, write a `# %%` cell, and press `,c`. For **inline
+figures** you need a terminal that speaks the kitty graphics protocol
+(**kitty**, **ghostty**, **WezTerm**) and, if you use tmux, one setting:
+
+```vim
+" ~/.vimrc / init.vim
+set termguicolors                 " required for inline figures
+" let cmdline_notebook_python = '/path/to/venv/bin/python'  " only to override $PATH python3
+" let cmdline_notebook_enable = 0                           " opt out: classic REPL only
+```
+
+```tmux
+# ~/.tmux.conf — only if you work inside tmux (≥ 3.3)
+set -g allow-passthrough on
+```
+
+Install the kernel once with `pip install jupyter_client ipykernel`, then run
+`:checkhealth europa` to confirm. Inline images work **over SSH** with no extra
+setup — the escape sequences ride the same connection. Inside tmux they pass
+through with the setting above; for **sixel** terminals or **nested tmux**, use
+[plotty] (`let cmdline_notebook_figures = 'plotty'`).
+
 ## Usage
 
-If you are editing one of the supported file types, in Normal mode do:
+For **Python on Neovim**, europa treats the file as a notebook: split it into
+`# %%` cells and run them through a Jupyter kernel, with each cell's output
+shown inline underneath. Running a cell the first time starts the kernel for
+you — no `,s`, no manual toggle. (Other languages — and Python, if you start a
+REPL with `,s` first — use the *same keys* to send code to an interpreter
+instead; see [Notebook mode](#notebook-mode-neovim--python).)
 
-  - `,s` to start the interpreter.
+Cells are delimited by a separator line, `# %%` by default (the Jupyter/VSCode
+convention; a markdown cell is `# %% [markdown]`). Set it with `cmdline_block_sep`.
 
-  - `<Space>` to send the current line to the interpreter.
+In **Normal mode**:
 
-  - `,<Space>` to send the current line and keep the cursor on the current line.
+  - `,c` — run the current cell (starts the kernel the first time).
+  - `,n` — run the current cell and jump to the next.
+  - `,e` — run from the cursor to the end of the cell.
+  - `,]` / `,[` — jump to the next / previous cell.
+  - `<Space>` — send the current line (and move down).
+  - `,<Space>` — send the current line, keeping the cursor put.
+  - `,p` — send to the end of the paragraph.
+  - `,b` — send the block between the two closest marks.
+  - `,f` — send the whole file.
+  - `,i` — interrupt the running cell (e.g. to stop a runaway loop).
+  - `,K` — clear the current cell's output; `,o` — open its full output in a popup.
+  - `,k` — toggle notebook mode; `,s` — start a classic REPL; `,q` — quit it.
 
-  - `,q` to send the quit command to the interpreter.
+In **Visual mode**, `<Space>` sends the selection.
 
-For languages that can source chunks of code:
+`<Space>`, the paragraph/block/file keys, and the Visual send route to the
+**kernel** while notebook mode is active for the buffer and to the **REPL**
+otherwise. `,p`, `,b`, `,f`, and the Visual send apply to languages that can
+source chunks of code (Python among them).
 
-  - In Visual mode, press `<Space>` to send the selection.
-
-  - In Normal mode, press:
-
-    - `,p` to send from the current line to the end of the paragraph.
-
-    - `,b` to send the block of code between the two closest marks.
-
-    - `,f` to send the entire file to the interpreter.
-
-> The default key prefix is `,`. To use the original `<LocalLeader>` prefix
-> instead, set `let cmdline_default_keybindings = 1` (see [Key mappings](#key-mappings)).
-> Every individual mapping can also be remapped — see the options below.
-
-### Code blocks (cells)
-
-Files can be divided into code blocks (also called "cells") delimited by a
-separator line, by default `# %%`, matching the convention used by Jupyter and
-VSCode (a markdown cell is just `# %% [markdown]`). The separator is set with
-`cmdline_block_sep`. For languages that can source chunks of code, the
-following Normal-mode mappings operate on these blocks:
-
-  - `,c` to execute the current code block.
-
-  - `,n` to execute the current code block and jump to the next one.
-
-  - `,e` to execute from the current line to the end of the block.
-
-  - `,]` to jump to the next block.
-
-  - `,[` to jump to the previous block.
+> The default prefix is `,`. Set `let cmdline_default_keybindings = 1` to use the
+> original `<LocalLeader>` prefix instead. Every mapping is individually
+> remappable — see [Key mappings](#key-mappings).
 
 ## Notebook mode (Neovim & Python)
 
-Notebook mode is an optional, toggleable alternative to the REPL transports. In
-this mode the code in a buffer is treated like the cells of a Jupyter notebook:
-each cell is run by a **headless [Jupyter] kernel** and its **text output is
-shown inline, directly under the cell** in a rounded box, instead of in a
-separate terminal. Matplotlib figures render **inline in the same output box**
-by default (kitty graphics — see [Inline figures](#inline-figures-kitty-graphics));
-set `cmdline_notebook_figures = 'plotty'` to route them to **[plotty]**'s tmux
-pane instead (sixel/kitty, works over SSH). The mode is off by default, is
-Neovim-only and (for now) Python-only, and does not change any existing
-behavior.
+Notebook mode is **on by default** on Neovim for Python: the code in a buffer is
+treated like the cells of a Jupyter notebook, each cell run by a **headless
+[Jupyter] kernel** with its **text output shown inline, directly under the
+cell** in a rounded box instead of in a separate terminal. Matplotlib figures
+render **inline in the same output box** by default (kitty graphics — see
+[Inline figures](#inline-figures-kitty-graphics)); set
+`cmdline_notebook_figures = 'plotty'` to route them to **[plotty]**'s tmux pane
+instead (sixel/kitty, works over SSH). It is Neovim-only and (for now)
+Python-only.
+
+**Prefer a classic REPL?** Start one with `,s` before running any cell — a live
+REPL takes over the buffer's send and cell keys, so notebook mode stays out of
+the way. To turn the feature off entirely, set `let cmdline_notebook_enable = 0`
+in your vimrc; the plugin then behaves exactly like classic vimcmdline.
 
 ### Requirements
 
@@ -127,29 +154,32 @@ plotty is only needed if you want plots rendered in the terminal — without it,
 text output still works and image output is simply skipped. Run
 `:checkhealth europa` to verify what's available.
 
-### Enabling and using it
+### Using it
 
-Opt in once in your `vimrc`:
+Notebook mode is on by default and needs **no extra configuration**: as long as
+the `python3` on your `$PATH` — e.g. the interpreter of the virtualenv or conda
+env you launched Neovim from — has `jupyter_client` and `ipykernel` installed,
+just open a Python buffer and run a cell (`,c`) and the kernel starts
+automatically. `,k` toggles it by hand. The statusline shows ` ⏳ kernel` while
+starting and ` ● kernel` once ready.
+
+You only need to set anything if you want a **different** interpreter than the
+environment's `python3`, or to turn the feature off entirely — otherwise skip
+this:
 
 ```vim
-let cmdline_notebook_enable = 1
-" Optional: point at the Python that has jupyter_client / ipykernel / plotty
-let cmdline_notebook_python = 'python3'
+" Optional — ONLY to override the environment's python3 (e.g. a specific venv
+" whose python has jupyter_client + ipykernel):
+let cmdline_notebook_python = '/path/to/venv/bin/python'
+" Classic REPL only (disable notebook mode):
+" let cmdline_notebook_enable = 0
 ```
 
-Then, in a Python buffer:
-
-  - `,k` toggles notebook mode on/off (starts/stops the kernel). The statusline
-    shows ` ⏳ kernel` while starting and ` ● kernel` once ready.
-
-While notebook mode is on, the cell and send mappings run through the kernel
-and render output inline instead of to a REPL:
-
-  - `,c` run the current cell, `,n` run it and jump to the next, `,e` run to the
-    end of the cell.
-  - `<Space>` / visual `<Space>` / `,p` / `,b` / `,f` also run through the kernel.
-  - `,K` clears the output under the current cell; `,o` opens the current
-    cell's full output in a popup; `,i` interrupts the running cell.
+All the cell and send keys — `,c` / `,n` / `,e`, `<Space>`, Visual `<Space>`,
+`,p` / `,b` / `,f` — run through the kernel while notebook mode is active (see
+[Usage](#usage) for the full list), plus the notebook-only keys `,K` (clear the
+cell's output), `,o` (open its full output in a popup), and `,i` (interrupt the
+running cell).
 
 Each executed cell is marked with `✓ [N]` (or `✗ [N]` on error), where `N` is
 the kernel execution count — embedded in the output box's top border, or shown
@@ -160,27 +190,43 @@ show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 
 **By default**, matplotlib figures are drawn **inside the cell's output box**
 using the kitty graphics protocol (the same Unicode-placeholder mechanism as
-plotty's kitty renderer, so it survives tmux and SSH). Adjust or change the
+plotty's kitty renderer, so it survives tmux and SSH). This needs a terminal
+that **speaks the kitty graphics protocol** — for example **kitty**,
+**ghostty**, or **WezTerm** — plus `:set termguicolors`. Adjust or change the
 routing in your vimrc:
 
 ```vim
 let cmdline_notebook_figures     = 'inline'   " default ('plotty' = tmux pane, 'none' = off)
-let cmdline_notebook_figure_size = 50     " width in terminal columns
+let cmdline_notebook_figure_size = 50     " WIDTH in terminal columns
+let cmdline_notebook_figure_rows = 0      " HEIGHT in rows; 0 = keep the image's aspect ratio
 let cmdline_notebook_figure_dpi  = 200    " render resolution
 ```
 
-> **⚠ Terminal without kitty graphics?** Inline figures require **kitty** or
-> **ghostty**. On sixel-only terminals (xterm, foot, Konsole, WezTerm, …) the
-> cell shows a `[figure not displayed: …]` note instead of a plot. Restore the
-> previous behavior — figures in [plotty]'s tmux pane, which works on sixel
-> terminals — with:
->
-> ```vim
-> let cmdline_notebook_figures = 'plotty'
-> ```
->
-> `:checkhealth europa` reports whether your setup meets the inline
-> requirements.
+Width and height are **separate** settings: `cmdline_notebook_figure_size` is
+the width (columns) and `cmdline_notebook_figure_rows` is the height (rows; `0`
+derives it from the figure's aspect ratio). To set both at once — and live —
+use `:CmdLineNotebookFigureSize {width} [{height}]` (see below); the single
+variable does not take a `width height` pair.
+
+Inline uses the kitty protocol only. **For sixel**, or to display images in
+**nested tmux**, route figures to [plotty]'s dedicated tmux pane instead:
+
+```vim
+let cmdline_notebook_figures = 'plotty'   " sixel or kitty, in a tmux pane
+```
+
+| Figure display | Protocol | In tmux | Nested tmux | Over SSH | SSH + tmux |
+|---|---|---|---|---|---|
+| **Inline** (default) | kitty only | ✅ (`allow-passthrough on`) | ❌ | ✅ | ✅ |
+| **[plotty] pane** | sixel *or* kitty | ✅ (tmux required) | ✅ (sixel only) | ✅ | ✅ |
+
+> **⚠ Terminal without the kitty graphics protocol?** Any terminal that speaks
+> it works for inline figures (kitty, ghostty, WezTerm, …); on terminals that
+> do not (e.g. xterm, foot, Konsole) the cell shows a `[figure not displayed:
+> …]` note instead of a plot. Nested tmux carries images only over **sixel**,
+> so it needs the plotty pane too. Switch either case with
+> `let cmdline_notebook_figures = 'plotty'`; `:checkhealth europa` reports what
+> your setup supports.
 
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
 [{height}]` (height in rows; omit it to keep the image's aspect ratio)
@@ -206,9 +252,10 @@ blank out first. To keep everything visible at once, lower
 `cmdline_notebook_figure_dpi`, use smaller figures, or clear cells you no
 longer need (`,K` / `:CmdLineNotebookClearAll`).
 
-Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
-`:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
-Sixel cannot be used here — it cannot be anchored to buffer cells, which is
+Requirements for inline: a terminal that speaks the **kitty graphics protocol**
+(e.g. **kitty**, **ghostty**, **WezTerm**), `:set termguicolors`, and inside
+tmux ≥ 3.3 `set -g allow-passthrough on`. Sixel cannot be used here — it cannot
+be anchored to buffer cells, which is
 exactly why plotty renders sixel in a dedicated pane. **Nested tmux is not
 supported** (the passthrough envelope survives only one tmux hop); europa
 detects nesting, warns once at kernel start, and shows a text note instead of
@@ -399,7 +446,7 @@ let cmdline_app['sh']     = 'bash'
 
 | Variable | Default | Description |
 |---|---|---|
-| `cmdline_notebook_enable` | `0` | Master switch. When `0`, no notebook commands/maps exist and behavior is unchanged |
+| `cmdline_notebook_enable` | `1` | Master switch (Neovim). When `0`, no notebook commands/maps exist and behavior is classic REPL only |
 | `cmdline_notebook_python` | `'python3'` | Python executable that runs the kernel bridge (needs `jupyter_client` + `ipykernel`) |
 | `cmdline_notebook_kernel_name` | `'python3'` | Jupyter kernelspec name to launch |
 | `cmdline_notebook_plotty` | `1` | Run `import plotty; plotty.enable()` at kernel start (skipped if plotty is absent) |
