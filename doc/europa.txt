@@ -101,6 +101,7 @@ Notebook-mode mappings, see |vimcmdline-notebook| (only when enabled): >
 	,k			Toggle notebook mode (start/stop the kernel)
 	,K			Clear the output under the current cell
 	,o			Open the current cell's full output in a popup
+	,i			Interrupt the running cell (stop a runaway loop)
 <
 ==============================================================================
 4. Code blocks						*vimcmdline_blocks*
@@ -142,6 +143,7 @@ Mapping options (value is the key sequence to use): >
 	cmdline_map_notebook_toggle
 	cmdline_map_notebook_clear
 	cmdline_map_notebook_output
+	cmdline_map_notebook_interrupt
 <
 For notebook-mode options see |vimcmdline-notebook|.
 

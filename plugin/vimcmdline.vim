@@ -750,6 +750,9 @@ endif
 if !exists("g:cmdline_map_notebook_output")
     let g:cmdline_map_notebook_output = s:p . "o"
 endif
+if !exists("g:cmdline_map_notebook_interrupt")
+    let g:cmdline_map_notebook_interrupt = s:p . "i"
+endif
 unlet s:p
 
 " Notebook mode (Neovim only, opt-in via g:cmdline_notebook_enable). When the

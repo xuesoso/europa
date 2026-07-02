@@ -149,7 +149,7 @@ and render output inline instead of to a REPL:
     end of the cell.
   - `<Space>` / visual `<Space>` / `,p` / `,b` / `,f` also run through the kernel.
   - `,K` clears the output under the current cell; `,o` opens the current
-    cell's full output in a popup.
+    cell's full output in a popup; `,i` interrupts the running cell.
 
 Each executed cell is marked with `✓ [N]` (or `✗ [N]` on error), where `N` is
 the kernel execution count — embedded in the output box's top border, or shown
@@ -277,6 +277,7 @@ sending lines is unchanged).
 | `cmdline_map_notebook_toggle` | `,k` | Toggle notebook mode |
 | `cmdline_map_notebook_clear` | `,K` | Clear the current cell's output (notebook mode) |
 | `cmdline_map_notebook_output` | `,o` | Open the current cell's full output in a popup (notebook mode) |
+| `cmdline_map_notebook_interrupt` | `,i` | Interrupt the running cell (`:CmdLineNotebookInterrupt`) — e.g. to stop a runaway loop |
 
 ```vim
 " Example: keep the original <LocalLeader> bindings, but remap one action
