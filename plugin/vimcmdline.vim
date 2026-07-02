@@ -45,6 +45,17 @@ let g:cmdline_block_sep = get(g:, 'cmdline_block_sep', '# %%')
 
 " Notebook mode options (Neovim only; see :help vimcmdline-notebook)
 let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 0)
+" Figure routing: 'inline' (default; kitty graphics drawn in the cell output —
+" needs kitty/ghostty + termguicolors), 'plotty' (tmux pane), or 'none'. When
+" unset, an EXPLICIT legacy g:cmdline_notebook_plotty still wins for
+" back-compat (1 => 'plotty', 0 => 'none').
+if !exists('g:cmdline_notebook_figures')
+    if exists('g:cmdline_notebook_plotty')
+        let g:cmdline_notebook_figures = g:cmdline_notebook_plotty ? 'plotty' : 'none'
+    else
+        let g:cmdline_notebook_figures = 'inline'
+    endif
+endif
 let g:cmdline_notebook_plotty = get(g:, 'cmdline_notebook_plotty', 1)
 let g:cmdline_notebook_startup_code = get(g:, 'cmdline_notebook_startup_code', [])
 let g:cmdline_notebook_python = get(g:, 'cmdline_notebook_python', '')
@@ -55,10 +66,6 @@ let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
 let g:cmdline_notebook_output_win = get(g:, 'cmdline_notebook_output_win', 'float')
 let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 1)
-" Figure routing: 'plotty' (tmux pane), 'inline' (kitty graphics drawn in the
-" cell output; needs kitty/ghostty + termguicolors), or 'none'. Empty derives
-" from g:cmdline_notebook_plotty for back-compat.
-let g:cmdline_notebook_figures = get(g:, 'cmdline_notebook_figures', '')
 let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 50)
 let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 200)
 let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cell_aspect', 2.0)

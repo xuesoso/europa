@@ -320,14 +320,16 @@ cmdline_notebook_output_win  Window used by :CmdLineNotebookOpenOutput: 'float'
 			'split'. Default: 'float'.
 
 							*cmdline_notebook_figures*
-cmdline_notebook_figures  Where matplotlib figures render: 'plotty' (default;
-			plotty's tmux pane), 'inline' (kitty graphics drawn
-			inside the cell's output box — needs a kitty-protocol
-			terminal such as kitty/ghostty, 'termguicolors', and
-			tmux `allow-passthrough on` when inside tmux), or
-			'none'. Nested tmux is not supported: europa detects
-			it, warns at kernel start, and falls back to a text
-			note (use 'plotty' there). When inline display is
+cmdline_notebook_figures  Where matplotlib figures render: 'inline' (default;
+			kitty graphics drawn inside the cell's output box —
+			needs a kitty-protocol terminal such as kitty/ghostty,
+			'termguicolors', and tmux `allow-passthrough on` when
+			inside tmux), 'plotty' (plotty's tmux pane), or
+			'none'. When this option is unset, an EXPLICIT legacy
+			g:cmdline_notebook_plotty still wins (1 => 'plotty',
+			0 => 'none'). Nested tmux is not supported: europa
+			detects it, warns at kernel start, and falls back to a
+			text note (use 'plotty' there). When inline display is
 			unavailable the cell shows a text note instead.
 
 							*cmdline_notebook_figure_size*

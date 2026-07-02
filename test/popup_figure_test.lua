@@ -25,6 +25,9 @@ local function check(label, got, want)
   end
 end
 
+-- Inline is the default figure mode when nothing figure-related is set.
+check('default_figures_inline', vim.g.cmdline_notebook_figures, 'inline')
+
 local writes = {}
 img._set_tty_writer(function(bytes)
   writes[#writes + 1] = bytes

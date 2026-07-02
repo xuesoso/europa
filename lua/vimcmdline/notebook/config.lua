@@ -26,12 +26,12 @@ function M.read()
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
   cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))
-  -- Figure routing: 'plotty' (tmux pane, the default), 'inline' (kitty
-  -- graphics in the cell output), or 'none'. When unset, derive from the
-  -- legacy cmdline_notebook_plotty flag so existing configs keep working.
-  local figures = gget('cmdline_notebook_figures', '')
+  -- Figure routing: 'inline' (kitty graphics in the cell output — the
+  -- default), 'plotty' (tmux pane), or 'none'. plugin/vimcmdline.vim resolves
+  -- the legacy cmdline_notebook_plotty flag into this option at load time.
+  local figures = gget('cmdline_notebook_figures', 'inline')
   if figures ~= 'plotty' and figures ~= 'inline' and figures ~= 'none' then
-    figures = cfg.plotty and 'plotty' or 'none'
+    figures = 'inline'
   end
   cfg.figures = figures
   cfg.figure_size = tonumber(gget('cmdline_notebook_figure_size', 50)) or 50

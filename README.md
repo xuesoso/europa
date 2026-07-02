@@ -15,8 +15,9 @@ cell's text output rendered **inline, directly under the cell**:
 ╰─────────────╯
 ```
 
-Plots and other images are drawn in the terminal by **[plotty]** (sixel/kitty,
-works over SSH) — europa itself stays terminal-only. It is built on top of
+Plots are drawn **inline in the cell output** via the kitty graphics protocol
+(works over tmux and SSH), or in **[plotty]**'s tmux pane (sixel/kitty) —
+europa itself stays terminal-only. It is built on top of
 [vimcmdline]'s REPL engine, so it is also a plain **send-to-interpreter** plugin
 for Clojure, Golang, Haskell, JavaScript, Julia, Jupyter, Lisp, Macaulay2,
 Matlab, Prolog, Python, Ruby, Sage, Scala, Shell script, and Swift, in either
@@ -105,8 +106,10 @@ Notebook mode is an optional, toggleable alternative to the REPL transports. In
 this mode the code in a buffer is treated like the cells of a Jupyter notebook:
 each cell is run by a **headless [Jupyter] kernel** and its **text output is
 shown inline, directly under the cell** in a rounded box, instead of in a
-separate terminal. Plots and other images are rendered by **[plotty]** in its
-own tmux pane (sixel/kitty, works over SSH). The mode is off by default, is
+separate terminal. Matplotlib figures render **inline in the same output box**
+by default (kitty graphics — see [Inline figures](#inline-figures-kitty-graphics));
+set `cmdline_notebook_figures = 'plotty'` to route them to **[plotty]**'s tmux
+pane instead (sixel/kitty, works over SSH). The mode is off by default, is
 Neovim-only and (for now) Python-only, and does not change any existing
 behavior.
 
@@ -155,13 +158,13 @@ show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 
 ### Inline figures (kitty graphics)
 
-By default figures render in [plotty]'s tmux pane. Alternatively, matplotlib
-figures can be drawn **inside the cell's output box** using the kitty graphics
-protocol (the same Unicode-placeholder mechanism as plotty's kitty renderer,
-so it survives tmux and SSH):
+**By default**, matplotlib figures are drawn **inside the cell's output box**
+using the kitty graphics protocol (the same Unicode-placeholder mechanism as
+plotty's kitty renderer, so it survives tmux and SSH). Adjust or change the
+routing in your vimrc:
 
 ```vim
-let cmdline_notebook_figures     = 'inline'
+let cmdline_notebook_figures     = 'inline'   " default ('plotty' = tmux pane, 'none' = off)
 let cmdline_notebook_figure_size = 50     " width in terminal columns
 let cmdline_notebook_figure_dpi  = 200    " render resolution
 ```
@@ -344,7 +347,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 | `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
-| `cmdline_notebook_figures` | `'plotty'` | Figure routing: `'plotty'` (tmux pane), `'inline'` (kitty graphics drawn inside the cell output), or `'none'` |
+| `cmdline_notebook_figures` | `'inline'` | Figure routing: `'inline'` (kitty graphics drawn inside the cell output), `'plotty'` (tmux pane), or `'none'`. An explicit legacy `cmdline_notebook_plotty` still wins when this is unset |
 | `cmdline_notebook_figure_size` | `50` | Inline figure width in terminal columns (capped to the window); applies live |
 | `cmdline_notebook_figure_rows` | `0` | Explicit inline figure height in rows; `0` keeps the image's aspect ratio; applies live |
 | `cmdline_notebook_figure_dpi` | `200` | Resolution the kernel renders figures at (matplotlib dpi) |
