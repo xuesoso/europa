@@ -215,7 +215,7 @@ function M.execute_cell(bufnr, end_line, lines)
   local cell_id = b.cell_seq
   local start_line = math.max(end_line - #lines + 1, 1)
   render.begin(bufnr, cell_id, start_line, end_line, b.cfg.max_lines, b.cfg.border, b.cfg.exec_marker,
-               vim.bo[bufnr].filetype)
+               vim.bo[bufnr].filetype, b.cfg.max_kept)
   local req = { type = 'execute', cell_id = cell_id, code = table.concat(lines, '\n') }
   if b.ready then
     b.handle.send(req)

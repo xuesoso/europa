@@ -22,6 +22,7 @@ function M.read()
   cfg.python = gget('cmdline_notebook_python', '')
   cfg.kernel_name = gget('cmdline_notebook_kernel_name', 'python3')
   cfg.max_lines = gget('cmdline_notebook_max_lines', 20)
+  cfg.max_kept = tonumber(gget('cmdline_notebook_max_kept_lines', 10000)) or 10000
   cfg.kernel_timeout = gget('cmdline_notebook_kernel_timeout', 30)
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')

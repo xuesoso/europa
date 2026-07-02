@@ -40,14 +40,50 @@ local function seg_append(seg, text)
   for i = 2, #parts do
     raw[#raw + 1] = parts[i]
   end
+  return #parts - 1  -- raw entries added (for the retention trigger counter)
+end
+
+-- Number of display lines a text segment contributes: a segment ending in a
+-- newline has a trailing '' raw entry that is suppressed at render time.
+local function seg_nlines(seg)
+  local n = #seg.raw
+  if n > 1 and seg.raw[n] == '' then
+    return n - 1
+  end
+  return n
+end
+
+local function marker_line(c)
+  return { ('··· %d lines elided ···'):format(c.dropped), HL.info }
+end
+
+-- The ordered segment walk for a cell: the frozen head (once retention has
+-- elided something), a synthetic 1-line elision marker, then the live tail.
+-- Cells that never overflowed have everything in c.segments.
+local function seg_walk(c)
+  if not c.head_segs then
+    return c.segments
+  end
+  local walk = {}
+  for _, seg in ipairs(c.head_segs) do
+    walk[#walk + 1] = seg
+  end
+  if c.dropped > 0 then
+    walk[#walk + 1] = { kind = 'marker' }
+  end
+  for _, seg in ipairs(c.segments) do
+    walk[#walk + 1] = seg
+  end
+  return walk
 end
 
 -- Flatten accumulated segments into a list of {text, hlgroup} screen lines.
 -- Inline-figure segments contribute their placeholder grid rows, tagged with
 -- img=true so downstream stages skip truncation/syntax-highlighting for them.
+-- The retention marker renders as an info line.
 local function flatten(c)
   local out = {}
-  for _, seg in ipairs(c.segments) do
+  for _, seg in ipairs(seg_walk(c)) do
     if seg.kind == 'image' then
       for _, row in ipairs(seg.image.rows) do
         -- w: placeholder rows have a known display width (their column
@@ -55,15 +91,14 @@ local function flatten(c)
         -- combining-character strings on every redraw.
         out[#out + 1] = { row, seg.image.hl, img = true, w = seg.image.cols }
       end
+    elseif seg.kind == 'marker' then
+      out[#out + 1] = marker_line(c)
     else
       local group = HL[seg.kind] or HL.stdout
       local raw = seg.raw
       -- A segment ending in a newline has a trailing '' — skip it so the next
       -- segment is not preceded by a spurious blank line.
-      local n = #raw
-      if n > 1 and raw[n] == '' then
-        n = n - 1
-      end
+      local n = seg_nlines(seg)
       for i = 1, n do
         out[#out + 1] = { raw[i], group }
       end
@@ -77,7 +112,7 @@ end
 
 -- Free terminal-side image placements owned by a cell (about to be dropped).
 local function free_cell_images(c)
-  for _, seg in ipairs(c.segments) do
+  for _, seg in ipairs(seg_walk(c)) do
     if seg.kind == 'image' then
       image.free(seg.image.id)
     end
@@ -371,6 +406,206 @@ local function build_virt(lines, border, title, ft)
   return virt
 end
 
+-- ---- output retention (head+tail elision) ---------------------------------
+--
+-- A runaway cell (`while True: print(...)`) must not grow memory or redraw
+-- cost without bound. Each cell keeps at most `cap` text lines (option
+-- cmdline_notebook_max_kept_lines; 0 = unlimited): on first overflow the
+-- first floor(cap/2) lines are FROZEN as the head, and thereafter lines are
+-- dropped from the front of the live tail, so the display shows how the
+-- output started and what it is doing now, with an exact
+-- "··· N lines elided ···" marker in between. Invariants:
+--   * only closed lines strictly behind the streaming splice point are ever
+--     dropped — never the open tail line the next chunk may extend;
+--   * image segments are exempt: encountered during elision they relocate to
+--     the frozen head (they precede all surviving tail content);
+--   * trims fire with hysteresis (cap + slack) so per-append cost stays O(1)
+--     amortised, and each trim recomputes counts exactly from #raw arithmetic
+--     rather than trusting an incremental counter.
+local function trim_slack(cap)
+  return math.max(8, math.floor(cap / 8))
+end
+
+local function trim(c)
+  local cap = c.cap
+  -- Exact tail total, in display lines.
+  local tail_total = 0
+  for _, seg in ipairs(c.segments) do
+    if seg.kind ~= 'image' then
+      tail_total = tail_total + seg_nlines(seg)
+    end
+  end
+
+  -- First overflow: freeze the head (first floor(cap/2) text lines; images
+  -- encountered on the way move with it).
+  if not c.head_segs then
+    local budget = math.max(1, math.floor(cap / 2))
+    local head, taken = {}, 0
+    while taken < budget and #c.segments > 0 do
+      local seg = c.segments[1]
+      if seg.kind == 'image' then
+        head[#head + 1] = table.remove(c.segments, 1)
+      else
+        local n = seg_nlines(seg)
+        if n <= budget - taken and #c.segments > 1 then
+          head[#head + 1] = table.remove(c.segments, 1)
+          taken = taken + n
+        else
+          local k = math.min(budget - taken, n - 1)  -- never take the open tail
+          if k < 1 then
+            break
+          end
+          local piece = {}
+          for i = 1, k do
+            piece[i] = seg.raw[i]
+          end
+          head[#head + 1] = { kind = seg.kind, raw = piece }
+          local rest = {}
+          for i = k + 1, #seg.raw do
+            rest[#rest + 1] = seg.raw[i]
+          end
+          seg.raw = rest
+          taken = taken + k
+          break
+        end
+      end
+    end
+    c.head_segs = head
+    c.head_nlines = taken
+    tail_total = tail_total - taken
+  end
+
+  -- Drop from the front of the tail until head + tail fits the cap.
+  local excess = c.head_nlines + tail_total - cap
+  local dropped = 0
+  while excess > 0 and #c.segments > 0 do
+    local seg = c.segments[1]
+    if seg.kind == 'image' then
+      -- Exempt: relocate before the elided region.
+      c.head_segs[#c.head_segs + 1] = table.remove(c.segments, 1)
+    else
+      local n = seg_nlines(seg)
+      local is_last = #c.segments == 1
+      if n <= excess and not is_last then
+        table.remove(c.segments, 1)
+        dropped = dropped + n
+        excess = excess - n
+      else
+        local k = math.min(excess, n - (is_last and 1 or 0))
+        if k < 1 then
+          break
+        end
+        local rest = {}
+        for i = k + 1, #seg.raw do
+          rest[#rest + 1] = seg.raw[i]
+        end
+        seg.raw = rest
+        dropped = dropped + k
+        excess = excess - k
+        break
+      end
+    end
+  end
+  c.dropped = c.dropped + dropped
+
+  -- Reset the (approximate) trigger counter to the exact retained raw count.
+  local nraw = 0
+  for _, seg in ipairs(c.segments) do
+    if seg.kind ~= 'image' then
+      nraw = nraw + #seg.raw
+    end
+  end
+  c.nraw = nraw
+
+  if dropped > 0 and not c.notified then
+    c.notified = true
+    local capv = cap
+    vim.schedule(function()
+      vim.notify(('europa: cell output exceeded %d kept lines — showing first/last'
+        .. ' (:CmdLineNotebookInterrupt stops the cell)'):format(capv),
+        vim.log.levels.WARN)
+    end)
+  end
+end
+
+-- Build the display window for redraw WITHOUT materialising every retained
+-- line: identical output to "full flatten, trailing-blank trim, then the
+-- max_lines cap", but text beyond the window is skipped with per-segment
+-- arithmetic instead of being walked line by line.
+local function display_lines(c)
+  local max = c.max_lines
+  local walk = seg_walk(c)
+
+  -- Totals: text lines (the marker counts as one), image rows, and the
+  -- trailing blank lines the reference semantics trim before capping.
+  local total_text, img_rows = 0, 0
+  for _, seg in ipairs(walk) do
+    if seg.kind == 'image' then
+      img_rows = img_rows + #seg.image.rows
+    elseif seg.kind == 'marker' then
+      total_text = total_text + 1
+    else
+      total_text = total_text + seg_nlines(seg)
+    end
+  end
+  local trailing = 0
+  do
+    local iw = #walk
+    while iw >= 1 do
+      local seg = walk[iw]
+      if seg.kind == 'image' or seg.kind == 'marker' then
+        break
+      end
+      local raw, j = seg.raw, seg_nlines(seg)
+      while j >= 1 and raw[j] == '' do
+        trailing = trailing + 1
+        j = j - 1
+      end
+      if j >= 1 then
+        break
+      end
+      iw = iw - 1
+    end
+  end
+  local trimmed = total_text - trailing
+
+  local capped = max and max > 0 and (trimmed + img_rows > max)
+  local shown = capped and math.min(max - 1, trimmed) or trimmed
+
+  local out, g = {}, 0
+  for _, seg in ipairs(walk) do
+    if seg.kind == 'image' then
+      for _, row in ipairs(seg.image.rows) do
+        out[#out + 1] = { row, seg.image.hl, img = true, w = seg.image.cols }
+      end
+    elseif seg.kind == 'marker' then
+      if g < shown then
+        out[#out + 1] = marker_line(c)
+      end
+      g = g + 1
+    else
+      local n = seg_nlines(seg)
+      if g < shown then
+        local take = math.min(n, shown - g)
+        local group = HL[seg.kind] or HL.stdout
+        local raw = seg.raw
+        for i = 1, take do
+          out[#out + 1] = { raw[i], group }
+        end
+      end
+      g = g + n  -- O(1) skip for segments wholly beyond the window
+    end
+  end
+  local hidden = trimmed - shown
+  if capped and hidden > 0 then
+    out[#out + 1] = {
+      ('… %d more lines (:CmdLineNotebookOpenOutput)'):format(hidden),
+      HL.info,
+    }
+  end
+  return out
+end
+
 local function redraw(bufnr, cell_id)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -380,30 +615,7 @@ local function redraw(bufnr, cell_id)
     return
   end
   c.last_draw = vim.loop.hrtime() / 1e6
-  local lines = flatten(c)
-  local max = c.max_lines
-  if max and max > 0 and #lines > max then
-    -- Cap counts TEXT lines only: figure rows are kept regardless (cutting a
-    -- placeholder grid mid-figure would corrupt the image).
-    local kept, ntext, dropped = {}, 0, 0
-    for _, l in ipairs(lines) do
-      if l.img then
-        kept[#kept + 1] = l
-      elseif ntext < max - 1 then
-        ntext = ntext + 1
-        kept[#kept + 1] = l
-      else
-        dropped = dropped + 1
-      end
-    end
-    if dropped > 0 then
-      kept[#kept + 1] = {
-        ('… %d more lines (:CmdLineNotebookOpenOutput)'):format(dropped),
-        HL.info,
-      }
-      lines = kept
-    end
-  end
+  local lines = display_lines(c)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
   -- embedded in the top border for cells with output, or as a single rule line
   -- for cells with none.
@@ -469,7 +681,8 @@ local function schedule(bufnr, cell_id)
 end
 
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
-function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker, ft)
+-- `max_kept` is the retention cap (nil => 10000 default; 0 => unlimited).
+function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker, ft, max_kept)
   local s = bstate(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, math.max(start_line - 1, 0), end_line)
   -- Drop stored output for any earlier run whose range overlaps this one, so
@@ -495,6 +708,13 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     done = false,
     count = nil,
     ok = true,
+    -- retention state
+    cap = max_kept == nil and 10000 or max_kept,
+    head_segs = nil,
+    head_nlines = 0,
+    dropped = 0,
+    nraw = 0,
+    notified = false,
   }
 end
 
@@ -527,8 +747,16 @@ function M.add(bufnr, cell_id, kind, text)
   if not (last and last.kind == kind) then
     last = { kind = kind, raw = { '' } }
     c.segments[#c.segments + 1] = last
+    c.nraw = c.nraw + 1
   end
-  seg_append(last, text)
+  c.nraw = c.nraw + seg_append(last, text)
+  -- Retention: nraw is a cheap raw-entry trigger (>= tail display lines); the
+  -- frozen head no longer lives in nraw, so it is added back here — otherwise
+  -- the retained total would drift up to head + cap + slack. The trim itself
+  -- recomputes exact counts.
+  if c.cap > 0 and c.head_nlines + c.nraw > c.cap + trim_slack(c.cap) then
+    trim(c)
+  end
   schedule(bufnr, cell_id)
 end
 
@@ -555,7 +783,7 @@ function M.resize_images(bufnr, want_cols, cell_aspect, want_rows)
   local n = 0
   for cell_id, c in pairs(s.cells) do
     local changed = false
-    for _, seg in ipairs(c.segments) do
+    for _, seg in ipairs(seg_walk(c)) do
       if seg.kind == 'image' and image.resize(seg.image, want_cols, cell_aspect, want_rows) then
         changed = true
         n = n + 1
@@ -641,15 +869,16 @@ function M.get_range_output(bufnr, start_line, end_line)
     return nil
   end
   local out = {}
-  for _, seg in ipairs(c.segments) do
+  for _, seg in ipairs(seg_walk(c)) do
     if seg.kind == 'image' then
       out[#out + 1] = { kind = 'image', png = seg.image.png,
                         iw = seg.image.iw, ih = seg.image.ih }
     else
-      local raw = seg.raw
-      local n = #raw
-      if n > 1 and raw[n] == '' then
-        n = n - 1
+      local lines, n
+      if seg.kind == 'marker' then
+        lines, n = { marker_line(c)[1] }, 1
+      else
+        lines, n = seg.raw, seg_nlines(seg)
       end
       local last = out[#out]
       if not (last and last.kind == 'text') then
@@ -657,7 +886,7 @@ function M.get_range_output(bufnr, start_line, end_line)
         out[#out + 1] = last
       end
       for i = 1, n do
-        last.lines[#last.lines + 1] = raw[i]
+        last.lines[#last.lines + 1] = lines[i]
       end
     end
   end

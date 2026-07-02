@@ -298,7 +298,20 @@ cmdline_notebook_startup_code  List of extra Python lines run once at kernel
 							*cmdline_notebook_max_lines*
 cmdline_notebook_max_lines  Maximum inline output lines shown per cell before
 			truncation. Default: 20. Use :CmdLineNotebookOpenOutput
-			to see the full output.
+			to see the full retained output.
+
+							*cmdline_notebook_max_kept_lines*
+cmdline_notebook_max_kept_lines  Retention cap per cell: at most this many
+			output lines are KEPT in memory — the first and last
+			halves, with an exact "··· N lines elided ···" marker
+			between — so a runaway cell (`while True: print(...)`)
+			cannot grow memory or redraw cost without bound.
+			Figures are never elided. A one-time warning suggests
+			:CmdLineNotebookInterrupt when a cell overflows.
+			Applies to newly executed cells. Default: 10000;
+			0 = keep everything (the pre-retention behavior).
+			NOTE: :CmdLineNotebookOpenOutput shows the retained
+			output — with the middle elided once a cell overflows.
 
 							*cmdline_notebook_kernel_timeout*
 cmdline_notebook_kernel_timeout  Seconds to wait for the kernel. Default: 30.

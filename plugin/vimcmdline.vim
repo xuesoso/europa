@@ -61,6 +61,10 @@ let g:cmdline_notebook_startup_code = get(g:, 'cmdline_notebook_startup_code', [
 let g:cmdline_notebook_python = get(g:, 'cmdline_notebook_python', '')
 let g:cmdline_notebook_kernel_name = get(g:, 'cmdline_notebook_kernel_name', 'python3')
 let g:cmdline_notebook_max_lines = get(g:, 'cmdline_notebook_max_lines', 20)
+" Retention cap per cell: at most this many output lines are KEPT (first and
+" last halves, with an elision marker between) so a runaway `while True:
+" print(...)` cannot grow memory or redraw cost without bound. 0 = unlimited.
+let g:cmdline_notebook_max_kept_lines = get(g:, 'cmdline_notebook_max_kept_lines', 10000)
 let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout', 30)
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)

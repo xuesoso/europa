@@ -354,6 +354,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_plotty` | `1` | Run `import plotty; plotty.enable()` at kernel start (skipped if plotty is absent) |
 | `cmdline_notebook_startup_code` | `[]` | Extra Python lines run once at kernel start |
 | `cmdline_notebook_max_lines` | `20` | Inline output line cap per cell (`:CmdLineNotebookOpenOutput` shows the rest) |
+| `cmdline_notebook_max_kept_lines` | `10000` | Retention cap per cell: at most this many output lines are kept (first + last halves with a `··· N lines elided ···` marker), so a runaway `while True: print(...)` cannot grow memory or stutter the UI. `0` = unlimited |
 | `cmdline_notebook_kernel_timeout` | `30` | Seconds to wait for the kernel to become ready |
 | `cmdline_notebook_border` | `'rounded'` | Output box border: `rounded`, `single`, `double`, or `none` |
 | `cmdline_notebook_border_color` | `'#005faf'` | Border color: `#rrggbb` hex, a cterm number, or a full `:highlight` spec (default dark blue) |
