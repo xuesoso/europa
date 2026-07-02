@@ -217,9 +217,48 @@ key-repeat — never launch a second kernel.
 Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
 `:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
-`:CmdLineNotebookOpenOutput` (opens the cell's full, untruncated output in a
+`:CmdLineNotebookOpenOutput` (opens the cell's full retained output in a
 read-only floating popup — `q` or `<Esc>` closes it; use a split instead with
 `cmdline_notebook_output_win`).
+
+### Runaway output protection
+
+A cell that floods output — the classic `while True: print(True)` — cannot
+grow memory or stutter the editor: each cell **retains at most
+`cmdline_notebook_max_kept_lines` lines of output** (default `10000`). When a
+cell overflows the cap, europa keeps the **first half** (how the output
+started) and the **last half** (what it is doing now), with an exact marker at
+the elision point:
+
+```
+P1
+P2
+···
+··· 184332 lines elided ···
+···
+P199999
+P200000
+```
+
+What you'll see when it triggers:
+
+  - a one-time warning suggesting `,i` (`:CmdLineNotebookInterrupt`) to stop
+    the cell;
+  - the inline box renders normally (it was already capped at
+    `cmdline_notebook_max_lines` for display — retention additionally bounds
+    what is *kept*);
+  - `,o` shows the retained output with the marker at the elision point, the
+    elided count in the **popup title**, and a footer note at the **end** of
+    the buffer — so the truncation is visible without scrolling to the middle.
+
+Figures are never elided. Redraw cost while a cell streams is flat regardless
+of how much output has accumulated. Tune or disable in your vimrc:
+
+```vim
+let cmdline_notebook_max_kept_lines = 10000  " default; lines kept per cell
+let cmdline_notebook_max_kept_lines = 0      " unlimited (pre-2.x behavior:
+                                             " memory grows with the output)
+```
 
 ### Column & key completion
 
