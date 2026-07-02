@@ -75,14 +75,25 @@ local function next_id()
 end
 
 -- Writable handle to the terminal. Overridable for tests (M._set_tty_writer).
+--
+-- Primary path: nvim_chan_send(v:stderr) — the TUI's stderr IS the terminal,
+-- writes bypass Neovim's renderer, and it works even though Lua may run in a
+-- server process with no controlling terminal (where open("/dev/tty") fails
+-- with ENXIO — the bug this replaced). /dev/tty is kept as a fallback.
+-- Returns ok, errmsg.
 local tty_writer = nil
 local function write_tty(bytes)
   if tty_writer then
     return tty_writer(bytes)
   end
-  local fd = vim.loop.fs_open('/dev/tty', 'w', 438)
+  local ok = pcall(vim.api.nvim_chan_send, vim.v.stderr, bytes)
+  if ok then
+    return true
+  end
+  local fd, oerr = vim.loop.fs_open('/dev/tty', 'w', 438)
   if not fd then
-    return false
+    return false, 'cannot reach terminal (v:stderr channel failed; /dev/tty: '
+      .. tostring(oerr) .. ')'
   end
   vim.loop.fs_write(fd, bytes, -1)
   vim.loop.fs_close(fd)
@@ -253,8 +264,9 @@ function M.show(png_path, iw, ih, want_cols, cell_aspect, want_rows)
   local cols, rows = M.fit(iw, ih, want_cols, cell_aspect, want_rows)
   local iid = next_id()
   local wrap = (vim.env.TMUX or '') ~= ''
-  if not write_tty(M.transmission_bytes(iid, png, cols, rows, wrap)) then
-    return nil, 'cannot write to /dev/tty'
+  local sent, serr = write_tty(M.transmission_bytes(iid, png, cols, rows, wrap))
+  if not sent then
+    return nil, serr or 'cannot write to the terminal'
   end
   local grid = {}
   for r = 0, rows - 1 do
