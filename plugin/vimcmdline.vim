@@ -59,8 +59,8 @@ let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 1)
 " cell output; needs kitty/ghostty + termguicolors), or 'none'. Empty derives
 " from g:cmdline_notebook_plotty for back-compat.
 let g:cmdline_notebook_figures = get(g:, 'cmdline_notebook_figures', '')
-let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 60)
-let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 100)
+let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 50)
+let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 200)
 let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cell_aspect', 2.0)
 " Explicit inline-figure height in rows; 0 (default) derives the height from
 " the image's aspect ratio. Both size options apply live: changing them (or

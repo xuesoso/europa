@@ -34,9 +34,9 @@ function M.read()
     figures = cfg.plotty and 'plotty' or 'none'
   end
   cfg.figures = figures
-  cfg.figure_size = tonumber(gget('cmdline_notebook_figure_size', 60)) or 60
+  cfg.figure_size = tonumber(gget('cmdline_notebook_figure_size', 50)) or 50
   cfg.figure_rows = tonumber(gget('cmdline_notebook_figure_rows', 0)) or 0
-  cfg.figure_dpi = tonumber(gget('cmdline_notebook_figure_dpi', 100)) or 100
+  cfg.figure_dpi = tonumber(gget('cmdline_notebook_figure_dpi', 200)) or 200
   cfg.figure_cell_aspect = tonumber(gget('cmdline_notebook_figure_cell_aspect', 2.0)) or 2.0
   cfg.tmp_dir = gget('cmdline_tmp_dir', '/tmp')
   if type(cfg.python) ~= 'string' or cfg.python == '' then

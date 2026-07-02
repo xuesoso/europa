@@ -162,8 +162,8 @@ so it survives tmux and SSH):
 
 ```vim
 let cmdline_notebook_figures     = 'inline'
-let cmdline_notebook_figure_size = 60     " width in terminal columns
-let cmdline_notebook_figure_dpi  = 100    " render resolution
+let cmdline_notebook_figure_size = 50     " width in terminal columns
+let cmdline_notebook_figure_dpi  = 200    " render resolution
 ```
 
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
@@ -340,9 +340,9 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 | `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
 | `cmdline_notebook_figures` | `'plotty'` | Figure routing: `'plotty'` (tmux pane), `'inline'` (kitty graphics drawn inside the cell output), or `'none'` |
-| `cmdline_notebook_figure_size` | `60` | Inline figure width in terminal columns (capped to the window); applies live |
+| `cmdline_notebook_figure_size` | `50` | Inline figure width in terminal columns (capped to the window); applies live |
 | `cmdline_notebook_figure_rows` | `0` | Explicit inline figure height in rows; `0` keeps the image's aspect ratio; applies live |
-| `cmdline_notebook_figure_dpi` | `100` | Resolution the kernel renders figures at (matplotlib dpi) |
+| `cmdline_notebook_figure_dpi` | `200` | Resolution the kernel renders figures at (matplotlib dpi) |
 | `cmdline_notebook_figure_cell_aspect` | `2.0` | Terminal cell height/width ratio used to keep the figure's aspect; applies live |
 
 ```vim
