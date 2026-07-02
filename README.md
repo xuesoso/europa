@@ -169,6 +169,19 @@ let cmdline_notebook_figure_size = 50     " width in terminal columns
 let cmdline_notebook_figure_dpi  = 200    " render resolution
 ```
 
+> **⚠ Terminal without kitty graphics?** Inline figures require **kitty** or
+> **ghostty**. On sixel-only terminals (xterm, foot, Konsole, WezTerm, …) the
+> cell shows a `[figure not displayed: …]` note instead of a plot. Restore the
+> previous behavior — figures in [plotty]'s tmux pane, which works on sixel
+> terminals — with:
+>
+> ```vim
+> let cmdline_notebook_figures = 'plotty'
+> ```
+>
+> `:checkhealth europa` reports whether your setup meets the inline
+> requirements.
+
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
 [{height}]` (height in rows; omit it to keep the image's aspect ratio)
 re-transmits every figure already on screen at the new size and redraws it —

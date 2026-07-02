@@ -218,9 +218,10 @@ See the README for the full list of cmdline_color_* options and examples.
 Notebook mode is an optional, toggleable alternative to the REPL transports
 (Neovim only, Python only). Each code block (|vimcmdline_blocks|) is run by a
 headless Jupyter (ipykernel) kernel and its TEXT output is shown inline,
-directly under the cell, using virtual lines. Images/plots are rendered by the
-plotty package (https://github.com/xuesoso/plotty) in its own tmux pane
-(sixel/kitty, works over SSH); vimcmdline never draws images itself.
+directly under the cell, using virtual lines. Matplotlib figures are drawn
+INLINE in the same output box by default (kitty graphics; survives tmux and
+SSH); alternatively they can render in the plotty package's own tmux pane
+(https://github.com/xuesoso/plotty) — see |cmdline_notebook_figures|.
 
 The mode is off by default and changes no existing behavior. Run
 :checkhealth europa to verify prerequisites.
@@ -229,8 +230,18 @@ Requirements:
   - Neovim 0.10+.
   - Python with jupyter_client and ipykernel:
       pip install jupyter_client ipykernel
-  - For inline plots: pip install plotty, and run inside tmux (>= 3.4) in a
-    sixel/kitty-capable terminal.
+  - For inline figures (the default): a kitty-graphics terminal (kitty or
+    ghostty), 'termguicolors', and inside tmux (>= 3.3)
+    `set -g allow-passthrough on`.
+  - For the plotty pane instead: pip install plotty, and run inside tmux
+    (>= 3.4) in a sixel/kitty-capable terminal.
+
+NOTE: terminals WITHOUT kitty graphics (sixel-only: xterm, foot, Konsole,
+WezTerm, ...) cannot display inline figures — cells show a
+"[figure not displayed: ...]" note instead. Set >
+	let cmdline_notebook_figures = 'plotty'
+<to route figures to plotty's tmux pane, which works on sixel terminals (this
+was the default before 'inline' became the default).
 
 Enable it in your |vimrc|: >
 	let cmdline_notebook_enable = 1
