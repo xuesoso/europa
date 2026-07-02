@@ -219,11 +219,13 @@ function M._set_nested(v)
 end
 
 function M.in_nested_tmux()
-  if (vim.env.TMUX or '') == '' then
-    return false
-  end
+  -- Cache first: it doubles as the test override, which must win even when
+  -- TMUX is unset (CI runs outside tmux).
   if nested_cache ~= nil then
     return nested_cache
+  end
+  if (vim.env.TMUX or '') == '' then
+    return false
   end
   local out = vim.fn.system({ 'tmux', 'display-message', '-p', '#{client_termname}' })
   nested_cache = vim.v.shell_error == 0
