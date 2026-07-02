@@ -631,6 +631,39 @@ local function find_cell(bufnr, start_line, end_line)
   return best
 end
 
+-- Structured output for the cell in a line range, for the output popup:
+-- an ordered list of {kind='text', lines={...}} and {kind='image', png=...,
+-- iw=..., ih=...} chunks (image chunks carry the retained PNG bytes so the
+-- popup can make its own, larger placement). nil when no cell matches.
+function M.get_range_output(bufnr, start_line, end_line)
+  local c = find_cell(bufnr, start_line, end_line)
+  if not c then
+    return nil
+  end
+  local out = {}
+  for _, seg in ipairs(c.segments) do
+    if seg.kind == 'image' then
+      out[#out + 1] = { kind = 'image', png = seg.image.png,
+                        iw = seg.image.iw, ih = seg.image.ih }
+    else
+      local raw = seg.raw
+      local n = #raw
+      if n > 1 and raw[n] == '' then
+        n = n - 1
+      end
+      local last = out[#out]
+      if not (last and last.kind == 'text') then
+        last = { kind = 'text', lines = {} }
+        out[#out + 1] = last
+      end
+      for i = 1, n do
+        last.lines[#last.lines + 1] = raw[i]
+      end
+    end
+  end
+  return out
+end
+
 -- Full (untruncated) output text for the cell in a line range, as a list.
 -- Inline figures are represented by a one-line note (placeholder glyphs are
 -- meaningless outside their highlighted virt_lines).

@@ -257,7 +257,9 @@ Commands: >
 	:CmdLineNotebookInterrupt   interrupt the running cell
 	:CmdLineNotebookClear       clear output under the current cell
 	:CmdLineNotebookClearAll    clear all output in the buffer
-	:CmdLineNotebookOpenOutput  open the current cell's full output in a popup
+	:CmdLineNotebookOpenOutput  open the current cell's full output in a
+			popup; a cell's inline figure is shown LARGER there
+			(~85% of the editor width, freed when the popup closes)
 <
 Options:
 							*cmdline_notebook_enable*

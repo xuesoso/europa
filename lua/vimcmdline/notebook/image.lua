@@ -261,6 +261,19 @@ function M.show(png_path, iw, ih, want_cols, cell_aspect, want_rows)
   local png = f:read('*a')
   f:close()
   os.remove(png_path)  -- transmitted from memory; the temp file is done
+  return M.place(png, iw, ih, want_cols, cell_aspect, want_rows)
+end
+
+-- Transmit PNG bytes as a fresh placement (new id) of want_cols columns and
+-- return the placeholder handle. Used by show() for the inline placement and
+-- by the output popup for its independent, larger placement of the same
+-- figure (a placement's geometry is fixed at transmission, so the popup must
+-- NOT reuse the inline id — resizing it would corrupt the inline copy).
+function M.place(png, iw, ih, want_cols, cell_aspect, want_rows)
+  local ok, err = M.supported()
+  if not ok then
+    return nil, err
+  end
   local cols, rows = M.fit(iw, ih, want_cols, cell_aspect, want_rows)
   local iid = next_id()
   local wrap = (vim.env.TMUX or '') ~= ''

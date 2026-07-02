@@ -389,16 +389,53 @@ end
 
 function M.open_output(bufnr, start_line, end_line)
   bufnr = resolve(bufnr)
-  local text = render.get_range_text(bufnr, start_line, end_line)
-  if not text or #text == 0 then
+  local chunks = render.get_range_output(bufnr, start_line, end_line)
+  if not chunks or #chunks == 0 then
     notify('no output for this cell')
     return
   end
   local cfg = config.read()
   local parent_ft = vim.bo[bufnr].filetype
 
+  -- Figures get their own, LARGER placement in the popup: same retained PNG
+  -- bytes, fresh image id (a placement's geometry is fixed at transmission,
+  -- so reusing the inline id would corrupt the inline copy), sized to most of
+  -- the editor width. Freed when the popup buffer is wiped.
+  local fig_cols = math.floor((vim.o.columns or 80) * 0.85)
+  local text, fig_marks, popup_ids = {}, {}, {}
+  for _, ch in ipairs(chunks) do
+    if ch.kind == 'text' then
+      for _, l in ipairs(ch.lines) do
+        text[#text + 1] = l
+      end
+    else
+      local placed = ch.png
+        and image.place(ch.png, ch.iw, ch.ih, fig_cols, cfg.figure_cell_aspect)
+        or nil
+      if placed then
+        popup_ids[#popup_ids + 1] = placed.id
+        for _, row in ipairs(placed.rows) do
+          text[#text + 1] = row
+          fig_marks[#fig_marks + 1] = { line = #text - 1, len = #row, hl = placed.hl }
+        end
+      else
+        text[#text + 1] = '[inline figure]'
+      end
+    end
+  end
+  if #text == 0 then
+    notify('no output for this cell')
+    return
+  end
+
   local obuf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(obuf, 0, -1, false, text)
+  -- The id-encoding foreground over each placeholder row (extmark highlights
+  -- take precedence over the buffer's syntax highlighting).
+  for _, m in ipairs(fig_marks) do
+    pcall(vim.api.nvim_buf_set_extmark, obuf, render.ns, m.line, 0,
+          { end_col = m.len, hl_group = m.hl })
+  end
   vim.bo[obuf].buftype = 'nofile'
   vim.bo[obuf].bufhidden = 'wipe'
   vim.bo[obuf].swapfile = false
@@ -408,6 +445,17 @@ function M.open_output(bufnr, start_line, end_line)
     vim.bo[obuf].filetype = parent_ft   -- match parent file's syntax
   end
   pcall(vim.api.nvim_buf_set_name, obuf, 'vimcmdline-output')
+  if #popup_ids > 0 then
+    vim.api.nvim_create_autocmd('BufWipeout', {
+      buffer = obuf,
+      once = true,
+      callback = function()
+        for _, id in ipairs(popup_ids) do
+          image.free(id)
+        end
+      end,
+    })
+  end
 
   if cfg.output_win == 'split' then
     vim.cmd('botright sbuffer ' .. obuf)

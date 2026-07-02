@@ -173,6 +173,11 @@ text output is untouched. Assigning `g:cmdline_notebook_figure_size` /
 `g:cmdline_notebook_figure_rows` / `g:cmdline_notebook_figure_cell_aspect`
 directly has the same effect.
 
+`,o` (`:CmdLineNotebookOpenOutput`) on a cell with a figure shows a **larger
+version of the plot** in the output popup (sized to ~85% of the editor width,
+same rendered resolution), alongside the cell's full text output; it is freed
+when the popup closes.
+
 Requirements: a kitty-graphics terminal (**kitty** or **ghostty**),
 `:set termguicolors`, and inside tmux ≥ 3.3 `set -g allow-passthrough on`.
 Sixel cannot be used here — it cannot be anchored to buffer cells, which is
