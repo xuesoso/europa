@@ -184,18 +184,24 @@ end
 -- assuming a cell is `cell_aspect` times taller than wide. A positive
 -- `want_rows` overrides the aspect-derived height (the terminal scales the
 -- image into the cols x rows box, so an explicit height may distort).
--- Returns cols, rows.
-function M.fit(iw, ih, want_cols, cell_aspect, want_rows)
+-- `max_rows` optionally tightens the height budget below the screen-derived
+-- cap (e.g. to the height of the window the figure must fit inside); when the
+-- aspect-derived height exceeds it, the width is scaled down to preserve the
+-- aspect. Returns cols, rows.
+function M.fit(iw, ih, want_cols, cell_aspect, want_rows, max_rows)
   local max_cols = math.min(math.max((vim.o.columns or 80) - 6, 4), M.MAX_CELLS)
-  local max_rows = math.min(math.max((vim.o.lines or 24) - 2, 1), M.MAX_CELLS)
+  local cap_rows = math.min(math.max((vim.o.lines or 24) - 2, 1), M.MAX_CELLS)
+  if max_rows and max_rows > 0 then
+    cap_rows = math.max(1, math.min(cap_rows, max_rows))
+  end
   local cols = math.max(1, math.min(want_cols, max_cols))
   if want_rows and want_rows > 0 then
-    return cols, math.max(1, math.min(want_rows, max_rows))
+    return cols, math.max(1, math.min(want_rows, cap_rows))
   end
   local rows = math.max(1, math.floor(cols * (ih / iw) / cell_aspect + 0.5))
-  if rows > max_rows then
-    cols = math.max(1, math.floor(cols * max_rows / rows + 0.5))
-    rows = max_rows
+  if rows > cap_rows then
+    cols = math.max(1, math.floor(cols * cap_rows / rows + 0.5))
+    rows = cap_rows
   end
   return cols, rows
 end
@@ -269,12 +275,12 @@ end
 -- by the output popup for its independent, larger placement of the same
 -- figure (a placement's geometry is fixed at transmission, so the popup must
 -- NOT reuse the inline id — resizing it would corrupt the inline copy).
-function M.place(png, iw, ih, want_cols, cell_aspect, want_rows)
+function M.place(png, iw, ih, want_cols, cell_aspect, want_rows, max_rows)
   local ok, err = M.supported()
   if not ok then
     return nil, err
   end
-  local cols, rows = M.fit(iw, ih, want_cols, cell_aspect, want_rows)
+  local cols, rows = M.fit(iw, ih, want_cols, cell_aspect, want_rows, max_rows)
   local iid = next_id()
   local wrap = (vim.env.TMUX or '') ~= ''
   local sent, serr = write_tty(M.transmission_bytes(iid, png, cols, rows, wrap))

@@ -91,6 +91,33 @@ check('inline_not_freed', freed:find('a=d,d=I,i=' .. inline_id, 1, true), nil)
 -- Inline placement untouched by the popup round-trip.
 check('inline_cols_unchanged', shown.cols, inline_cols)
 
+-- Tall figure must fit WHOLLY inside the popup viewport: with a short editor,
+-- the height budget binds and fit() scales the width down to keep the aspect.
+do
+  vim.o.lines = 30   -- popup_max_h = 30*0.9-2 = 25
+  render.begin(buf, 10, 2, 2, 50, 'rounded', true, nil)
+  local pf2 = vim.fn.tempname()
+  local f2 = io.open(pf2, 'wb'); f2:write(png); f2:close()
+  local tall = img.show(pf2, 400, 300, 20, 2.0)
+  render.add_image(buf, 10, tall)
+  render.mark_done(buf, 10, 10, 'ok')
+
+  writes = {}
+  nb.open_output(buf, 2, 2)
+  local owin = vim.api.nvim_get_current_win()
+  local obuf3 = vim.api.nvim_win_get_buf(owin)
+  local win_h = vim.api.nvim_win_get_height(owin)
+  local prows = tonumber(writes[1]:match(',r=(%d+)'))
+  check('tall_fig_rows_capped', prows ~= nil and prows <= 25, true)
+  check('tall_fig_fits_viewport', prows ~= nil and prows <= win_h, true)
+  -- aspect preserved under the height cap: cols scaled down, not full width
+  local pcols2 = tonumber(writes[1]:match(',c=(%d+),'))
+  check('tall_fig_aspect_scaled', pcols2 ~= nil and pcols2 < math.floor(120 * 0.85), true)
+  check('tall_fig_rows_in_buffer', #vim.api.nvim_buf_get_lines(obuf3, 0, -1, false), prows)
+  vim.cmd('bwipeout!')
+  vim.o.lines = 60
+end
+
 -- Regression: a text-only cell opens with no transmissions and plain text.
 render.begin(buf, 2, 2, 2, 50, 'rounded', true, nil)
 render.add(buf, 2, 'stdout', 'only text\n')

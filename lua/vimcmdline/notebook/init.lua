@@ -402,6 +402,10 @@ function M.open_output(bufnr, start_line, end_line)
   -- so reusing the inline id would corrupt the inline copy), sized to most of
   -- the editor width. Freed when the popup buffer is wiped.
   local fig_cols = math.floor((vim.o.columns or 80) * 0.85)
+  -- The figure must fit WHOLLY inside the popup viewport: budget its height
+  -- to the popup's maximum height (fit() scales the width down to preserve
+  -- the aspect when the height budget binds).
+  local popup_max_h = math.max(math.floor((vim.o.lines or 24) * 0.9) - 2, 5)
   local text, fig_marks, popup_ids = {}, {}, {}
   for _, ch in ipairs(chunks) do
     if ch.kind == 'text' then
@@ -410,7 +414,8 @@ function M.open_output(bufnr, start_line, end_line)
       end
     else
       local placed = ch.png
-        and image.place(ch.png, ch.iw, ch.ih, fig_cols, cfg.figure_cell_aspect)
+        and image.place(ch.png, ch.iw, ch.ih, fig_cols, cfg.figure_cell_aspect,
+                        nil, popup_max_h)
         or nil
       if placed then
         popup_ids[#popup_ids + 1] = placed.id
@@ -461,18 +466,23 @@ function M.open_output(bufnr, start_line, end_line)
     vim.cmd('botright sbuffer ' .. obuf)
     local swin = vim.api.nvim_get_current_win()
     vim.wo[swin].foldenable = false   -- do not fold output
+    -- Grow the split so a figure fits wholly in view (capped like the float).
+    pcall(vim.api.nvim_win_set_height, swin,
+          math.max(math.min(#text, popup_max_h + 2), 3))
     close_keys(obuf, nil)
     return
   end
 
-  -- Floating popup (default), centered and sized to the content.
+  -- Floating popup (default), centered and sized to the content. The height
+  -- budget matches popup_max_h, which the figure was fitted against — so the
+  -- figure is never taller than the viewport.
   local cols, lns = vim.o.columns, vim.o.lines
   local maxw = 0
   for _, l in ipairs(text) do
     maxw = math.max(maxw, vim.fn.strdisplaywidth(l))
   end
   local width = math.max(math.min(maxw + 2, math.floor(cols * 0.9)), 20)
-  local height = math.max(math.min(#text, math.floor(lns * 0.8)), 1)
+  local height = math.max(math.min(#text, popup_max_h + 2), 1)
   local win = vim.api.nvim_open_win(obuf, true, {
     relative = 'editor',
     width = width,

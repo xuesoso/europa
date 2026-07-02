@@ -46,6 +46,9 @@ echo "== inline figures: live resize (text must be untouched) =="
 echo "== inline figures: larger placement in the output popup =="
 "$NVIM" --headless -u NONE -N -l test/popup_figure_test.lua || rc=1
 
+echo "== leaks: placement balance, heap growth, process shutdown =="
+BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/leak_check.lua || rc=1
+
 echo "== inline figures: end-to-end (kernel + matplotlib) =="
 BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/figures_e2e.lua || rc=1
 
