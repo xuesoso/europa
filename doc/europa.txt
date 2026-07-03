@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.3.0
+Version:         2.4.0
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -220,10 +220,12 @@ See the README for the full list of cmdline_color_* options and examples.
 Notebook mode is ON by default (Neovim only, Python only). Each code block
 (|vimcmdline_blocks|) is run by a headless Jupyter (ipykernel) kernel and its
 TEXT output is shown inline, directly under the cell, using virtual lines.
-Matplotlib figures are drawn INLINE in the same output box by default (kitty
-graphics; survives tmux and SSH); alternatively they can render in the plotty
-package's own tmux pane (https://github.com/xuesoso/plotty) — see
-|cmdline_notebook_figures|.
+Matplotlib AND plotly figures are drawn INLINE in the same output box by
+default (kitty graphics; survives tmux and SSH); alternatively they can render
+in the plotty package's own tmux pane (https://github.com/xuesoso/plotty) — see
+|cmdline_notebook_figures|. Plotly needs kaleido + nbformat importable in the
+kernel's Python (both ship with a normal Jupyter install); without them europa
+leaves plotly's renderer untouched and matplotlib is unaffected.
 
 The mode is on by default; set cmdline_notebook_enable = 0 for classic
 REPL-only behavior. Run :checkhealth europa to verify prerequisites.
@@ -393,8 +395,12 @@ cmdline_notebook_figure_rows  Explicit inline figure height in rows; 0
 			cells to fit everything.
 
 							*cmdline_notebook_figure_dpi*
-cmdline_notebook_figure_dpi  Resolution (matplotlib dpi) the kernel renders
-			inline figures at. Default: 200.
+cmdline_notebook_figure_dpi  Source resolution the kernel renders inline figures
+			at. This is matplotlib's dpi AND plotly's render scale
+			(dpi / 100, matplotlib's baseline dpi), so one knob
+			drives both backends: the default 200 renders plotly at
+			2x its native 700x500. On-screen size is set separately
+			by |cmdline_notebook_figure_size|. Default: 200.
 
 							*cmdline_notebook_figure_cell_aspect*
 cmdline_notebook_figure_cell_aspect  Terminal cell height/width ratio used to

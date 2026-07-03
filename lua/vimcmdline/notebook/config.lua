@@ -75,6 +75,36 @@ function M.build_startup(cfg)
       'except Exception:',
       '    pass',
     }, '\n'))
+    -- Plotly renders through its own renderer, not matplotlib, and defaults to
+    -- an interactive JS mimebundle that never yields a PNG. In a terminal there
+    -- is no browser for that, so point the default renderer at the static
+    -- 'png' one: fig.show()/last-expr then emit display_data image/png exactly
+    -- like the inline mpl backend, reusing the same save+transmit pipeline with
+    -- no bridge changes.
+    --
+    -- Gated on BOTH probes so this never turns a figure into a hard error the
+    -- user didn't have before: kaleido does the PNG export, and plotly routes
+    -- every renderer through pio.show(), which raises unless nbformat>=4.2 is
+    -- importable. If either is missing we leave plotly's renderer untouched and
+    -- the figure falls back to the graceful non-text note.
+    --
+    -- cmdline_notebook_figure_dpi drives the SOURCE resolution of both backends
+    -- from one knob: matplotlib's baseline dpi is 100, so figure_dpi=200 renders
+    -- it at 2x; mapping plotly's render scale = figure_dpi/100 gives plotly the
+    -- same multiplier over its native 700x500 (=> 1400x1000 at the default).
+    -- Clamped to a positive floor so a tiny/zero dpi can't request a 0px image.
+    -- The scale line runs after the default is set, so if a plotly version lacks
+    -- the attribute the renderer still works at its native scale.
+    table.insert(startup, table.concat({
+      'try:',
+      '    import kaleido as _vcl_kaleido  # probe: png export needs kaleido',
+      '    import nbformat as _vcl_nbf  # probe: pio.show() needs nbformat>=4.2',
+      '    import plotly.io as _vcl_pio',
+      "    _vcl_pio.renderers.default = 'png'",
+      "    _vcl_pio.renderers['png'].scale = max(" .. cfg.figure_dpi .. " / 100.0, 0.1)",
+      'except Exception:',
+      '    pass',
+    }, '\n'))
   end
   local extra = cfg.startup_code
   if type(extra) == 'table' then

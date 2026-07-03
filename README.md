@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.3.0-blue)
+![version](https://img.shields.io/badge/version-2.4.0-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -37,9 +37,9 @@ emulator, or a tmux pane. Running it in a Neovim terminal colorizes the output
   - **Notebook mode by default** (Neovim + Python) — run `# %%` cells through a
     Jupyter kernel and see text output inline, in a rounded, colorable box
     ([details](#notebook-mode-neovim--python)).
-  - **Inline image output** — matplotlib figures render inline under the cell
-    via the kitty graphics protocol, and keep working **over SSH and inside
-    tmux** ([details](#inline-figures-kitty-graphics)).
+  - **Inline image output** — matplotlib **and plotly** figures render inline
+    under the cell via the kitty graphics protocol, and keep working **over SSH
+    and inside tmux** ([details](#inline-figures-kitty-graphics)).
   - **Runaway-output guard** — a cell that floods output cannot grow memory or
     stutter the editor; output is capped and elided with an exact marker
     ([details](#runaway-output-protection)).
@@ -188,12 +188,12 @@ show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 
 ### Inline figures (kitty graphics)
 
-**By default**, matplotlib figures are drawn **inside the cell's output box**
-using the kitty graphics protocol (the same Unicode-placeholder mechanism as
-plotty's kitty renderer, so it survives tmux and SSH). This needs a terminal
-that **speaks the kitty graphics protocol** — for example **kitty**,
-**ghostty**, or **WezTerm** — plus `:set termguicolors`. Adjust or change the
-routing in your vimrc:
+**By default**, both **matplotlib** and **plotly** figures are drawn **inside
+the cell's output box** using the kitty graphics protocol (the same
+Unicode-placeholder mechanism as plotty's kitty renderer, so it survives tmux
+and SSH). This needs a terminal that **speaks the kitty graphics protocol** —
+for example **kitty**, **ghostty**, or **WezTerm** — plus `:set termguicolors`.
+Adjust or change the routing in your vimrc:
 
 ```vim
 let cmdline_notebook_figures     = 'inline'   " default ('plotty' = tmux pane, 'none' = off)
@@ -201,6 +201,18 @@ let cmdline_notebook_figure_size = 50     " WIDTH in terminal columns
 let cmdline_notebook_figure_rows = 0      " HEIGHT in rows; 0 = keep the image's aspect ratio
 let cmdline_notebook_figure_dpi  = 200    " render resolution
 ```
+
+**Plotly** works alongside matplotlib with no extra configuration: in inline
+mode europa points plotly's default renderer at its static **`png`** renderer,
+so `fig.show()` (or a bare figure as the last line of a cell) lands in the same
+output box. This needs [`kaleido`] (plotly's static-image engine) and
+`nbformat` importable in the kernel's Python — both ship with a normal Jupyter
+install. If either is missing, europa leaves plotly's renderer untouched (so
+plotly behaves exactly as it would outside europa) and matplotlib is unaffected.
+`cmdline_notebook_figure_dpi` drives the **source resolution of both backends**:
+it is matplotlib's dpi, and it also sets plotly's render scale to `dpi / 100`
+(matplotlib's baseline dpi), so the default `200` renders plotly at 2× its
+native 700×500. On-screen size is still governed by `cmdline_notebook_figure_size`.
 
 Width and height are **separate** settings: `cmdline_notebook_figure_size` is
 the width (columns) and `cmdline_notebook_figure_rows` is the height (rows; `0`
@@ -463,7 +475,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_figures` | `'inline'` | Figure routing: `'inline'` (kitty graphics drawn inside the cell output), `'plotty'` (tmux pane), or `'none'`. An explicit legacy `cmdline_notebook_plotty` still wins when this is unset |
 | `cmdline_notebook_figure_size` | `50` | Inline figure width in terminal columns (capped to the window); applies live |
 | `cmdline_notebook_figure_rows` | `0` | Explicit inline figure height in rows; `0` keeps the image's aspect ratio; applies live |
-| `cmdline_notebook_figure_dpi` | `200` | Resolution the kernel renders figures at (matplotlib dpi) |
+| `cmdline_notebook_figure_dpi` | `200` | Source resolution the kernel renders figures at: matplotlib dpi, and plotly's render scale (`dpi / 100`, so `200` → plotly scale 2×) |
 | `cmdline_notebook_figure_cell_aspect` | `2.0` | Terminal cell height/width ratio used to keep the figure's aspect; applies live |
 
 ```vim
@@ -593,3 +605,4 @@ Plugins with similar functionality are [vimcmdline] (upstream), [neoterm],
 [blink.cmp]: https://github.com/saghen/blink.cmp
 [`jupyter_client`]: https://github.com/jupyter/jupyter_client
 [`ipykernel`]: https://github.com/ipython/ipykernel
+[`kaleido`]: https://github.com/plotly/Kaleido

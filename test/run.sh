@@ -43,6 +43,9 @@ echo "== inline figures: perf benchmark + content correctness =="
 echo "== inline figures: live resize (text must be untouched) =="
 "$NVIM" --headless -u NONE -N -l test/figure_resize_test.lua || rc=1
 
+echo "== inline figures: FigureRefresh re-transmits + defers repaint =="
+"$NVIM" --headless -u NONE -N -l test/figure_refresh_test.lua || rc=1
+
 echo "== inline figures: larger placement in the output popup =="
 "$NVIM" --headless -u NONE -N -l test/popup_figure_test.lua || rc=1
 
@@ -52,8 +55,14 @@ echo "== retention: elision equivalence/invariants, flat streaming cost =="
 echo "== leaks: placement balance, heap growth, process shutdown =="
 BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/leak_check.lua || rc=1
 
+echo "== figure backends: inline startup contract (mpl + plotly) =="
+BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/plotly_startup_test.lua || rc=1
+
 echo "== inline figures: end-to-end (kernel + matplotlib) =="
 BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/figures_e2e.lua || rc=1
+
+echo "== inline figures: end-to-end (kernel + plotly/kaleido) =="
+BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/plotly_e2e.lua || rc=1
 
 echo "== bridge round-trip ($PYTHON) =="
 "$PYTHON" test/bridge_test.py || rc=1

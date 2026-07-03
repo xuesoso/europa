@@ -371,11 +371,22 @@ function M.retransmit_figures()
   local n = render.refresh_all_images(vim.api.nvim_get_current_buf(),
                                       vim.api.nvim_win_get_cursor(0)[1])
   if n > 0 then
-    -- Repaint so the terminal re-composes the placeholder cells. Only with a
-    -- UI attached: headless :redraw! can crash nvim (and is pointless there).
-    if #vim.api.nvim_list_uis() > 0 then
-      pcall(vim.cmd, 'redraw!')
-    end
+    -- Repaint so the terminal re-composes the placeholder cells against the
+    -- freshly re-transmitted images. The repaint MUST run on a LATER event-loop
+    -- tick, not inline: the image APCs are written to v:stderr (queued by
+    -- libuv) while :redraw! flushes nvim's frame on stdout. A synchronous
+    -- redraw! re-emits the placeholder cells BEFORE the queued image bytes
+    -- reach the terminal, so it re-composes nothing and the figure stays blank
+    -- — exactly the "refresh does nothing" symptom. Deferring lets the
+    -- transmission flush first (the initial display never hit this: it redraws
+    -- a tick later anyway). The UI guard is INSIDE the callback: headless
+    -- :redraw! can crash nvim (and is pointless there), but scheduling itself
+    -- is harmless.
+    vim.schedule(function()
+      if #vim.api.nvim_list_uis() > 0 then
+        pcall(vim.cmd, 'redraw!')
+      end
+    end)
     notify(('refreshed %d figure%s'):format(n, n == 1 and '' or 's'))
   else
     notify('no figures to refresh')
