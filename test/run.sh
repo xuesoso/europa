@@ -31,6 +31,9 @@ echo "== notebook render: run marker / aborted cell (regression) =="
 echo "== notebook render: re-run refreshes inline output (regression) =="
 "$NVIM" --headless -u NONE -N -l test/render_rerun.lua || rc=1
 
+echo "== notebook render: output follows cell across buffer edits (regression) =="
+"$NVIM" --headless -u NONE -N -l test/render_edit.lua || rc=1
+
 echo "== notebook render: perf benchmark + output correctness =="
 "$NVIM" --headless -u NONE -N -l test/bench_render.lua || rc=1
 
@@ -51,6 +54,9 @@ echo "== inline figures: larger placement in the output popup =="
 
 echo "== retention: elision equivalence/invariants, flat streaming cost =="
 "$NVIM" --headless -u NONE -N -l test/retention_test.lua || rc=1
+
+echo "== retention: newline-free / CR-progress stream shapes =="
+"$NVIM" --headless -u NONE -N -l test/retention_stream_shapes.lua || rc=1
 
 echo "== leaks: placement balance, heap growth, process shutdown =="
 BENCH_PYTHON="$PYTHON" "$NVIM" --headless -u NONE -N -l test/leak_check.lua || rc=1

@@ -27,20 +27,91 @@ local function cell(bufnr, cell_id)
   return s and s.cells[cell_id] or nil
 end
 
+-- Refresh a cell's stored line range from its extmark. nvim shifts extmarks as
+-- lines are inserted/removed above them, but c.start_line/c.end_line are frozen
+-- at begin() time; consuming them stale re-pins the output at the wrong row on
+-- the next redraw (set_extmark with opts.id MOVES the mark) and breaks the
+-- overlap test in begin() and the lookups in find_cell()/clear_range() after
+-- the user edits the buffer. Cells whose mark was invalidated (anchor line
+-- deleted) or that have no mark yet keep their stored coordinates.
+local function sync_cell_pos(bufnr, c)
+  if not c.mark_id then
+    return
+  end
+  local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, M.ns, c.mark_id,
+                        { details = true })
+  if not ok or not pos or #pos == 0 then
+    return
+  end
+  local details = pos[3]
+  if details and details.invalid then
+    return
+  end
+  local new_end = pos[1] + 1
+  if new_end ~= c.end_line then
+    c.start_line = math.max(c.start_line + (new_end - c.end_line), 1)
+    c.end_line = new_end
+  end
+end
+
+-- Byte guards for retention. A stream that never emits a newline ('\r'
+-- progress bars, print(end='')) adds no raw entries, so a line-count trigger
+-- alone would never fire while the open tail grows without bound — and each
+-- append would re-copy the whole tail (O(n^2)). Two defenses:
+--   * TAIL_SPLIT: an open tail past this many bytes is closed off into
+--     droppable pieces (split on UTF-8 boundaries), keeping per-append copies
+--     bounded and giving the trimmer something to elide;
+--   * BYTES_PER_LINE: the retention byte budget is cap * this, enforced by
+--     trim() alongside the display-line cap.
+local TAIL_SPLIT = 4096
+local BYTES_PER_LINE = 256
+
 -- A segment stores its output pre-split into lines (seg.raw), maintained
 -- incrementally as chunks are appended: appending a chunk splices its first
--- part onto the open tail line and appends the rest. This is equivalent to
+-- part onto the open tail line and appends the rest. This matches
 -- split(concat(chunks), '\n') — raw's last element is '' exactly when the
--- accumulated text ends in a newline — but each redraw no longer re-joins and
--- re-splits the whole segment (which made streaming N lines O(N^2)).
+-- accumulated text ends in a newline — except that (a) carriage returns
+-- collapse each affected line to the text after its last '\r' (the visible
+-- state of a progress bar, not every intermediate repaint), and (b) an open
+-- tail past TAIL_SPLIT bytes is closed off into elidable pieces.
 local function seg_append(seg, text)
   local parts = vim.split(text, '\n', { plain = true })
   local raw = seg.raw
+  local before = #raw
+  local has_cr = text:find('\r', 1, true) ~= nil
   raw[#raw] = raw[#raw] .. parts[1]
-  for i = 2, #parts do
-    raw[#raw + 1] = parts[i]
+  if has_cr then
+    raw[#raw] = raw[#raw]:gsub('.*\r', '')
   end
-  return #parts - 1  -- raw entries added (for the retention trigger counter)
+  for i = 2, #parts do
+    raw[#raw + 1] = has_cr and parts[i]:gsub('.*\r', '') or parts[i]
+  end
+  local tail = raw[#raw]
+  if #tail > TAIL_SPLIT then
+    raw[#raw] = nil
+    local pos = 1
+    while #tail - pos + 1 > TAIL_SPLIT do
+      local cut = pos + TAIL_SPLIT - 1
+      -- Back up to a UTF-8 boundary so no piece ends mid-codepoint.
+      while cut > pos and tail:byte(cut + 1)
+          and tail:byte(cut + 1) >= 0x80 and tail:byte(cut + 1) < 0xC0 do
+        cut = cut - 1
+      end
+      raw[#raw + 1] = tail:sub(pos, cut)
+      pos = cut + 1
+    end
+    raw[#raw + 1] = tail:sub(pos)
+  end
+  return #raw - before  -- raw entries added (for the retention trigger counter)
+end
+
+-- Retained bytes of a text segment (+1 per entry for the joining newline).
+local function seg_bytes(seg)
+  local b = 0
+  for _, l in ipairs(seg.raw) do
+    b = b + #l + 1
+  end
+  return b
 end
 
 -- Number of display lines a text segment contributes: a segment ending in a
@@ -428,30 +499,54 @@ end
 
 local function trim(c)
   local cap = c.cap
-  -- Exact tail total, in display lines.
-  local tail_total = 0
-  for _, seg in ipairs(c.segments) do
+  local bcap = cap * BYTES_PER_LINE
+  local segments = c.segments
+  -- Exact tail totals, in display lines and retained bytes.
+  local tail_total, tail_bytes = 0, 0
+  for _, seg in ipairs(segments) do
     if seg.kind ~= 'image' then
       tail_total = tail_total + seg_nlines(seg)
+      tail_bytes = tail_bytes + seg_bytes(seg)
     end
   end
 
-  -- First overflow: freeze the head (first floor(cap/2) text lines; images
-  -- encountered on the way move with it).
+  -- `first` is the index of the first surviving segment; both phases advance
+  -- it and the survivors are compacted ONCE at the end, instead of
+  -- table.remove-ing the front per drop (which re-shifts the whole array each
+  -- time: O(n^2) when alternating stdout/stderr grows #segments large).
+  local first = 1
+  local nsegs = #segments
+
+  -- First overflow: freeze the head (first floor(cap/2) text lines, bounded
+  -- by half the byte budget too; images encountered on the way move with it).
   if not c.head_segs then
     local budget = math.max(1, math.floor(cap / 2))
-    local head, taken = {}, 0
-    while taken < budget and #c.segments > 0 do
-      local seg = c.segments[1]
+    local bbudget = bcap > 0 and math.floor(bcap / 2) or math.huge
+    local head, taken, hbytes = {}, 0, 0
+    while taken < budget and hbytes < bbudget and first <= nsegs do
+      local seg = segments[first]
       if seg.kind == 'image' then
-        head[#head + 1] = table.remove(c.segments, 1)
+        head[#head + 1] = seg
+        first = first + 1
       else
         local n = seg_nlines(seg)
-        if n <= budget - taken and #c.segments > 1 then
-          head[#head + 1] = table.remove(c.segments, 1)
+        local sb = seg_bytes(seg)
+        if n <= budget - taken and hbytes + sb <= bbudget and first < nsegs then
+          head[#head + 1] = seg
           taken = taken + n
+          hbytes = hbytes + sb
+          first = first + 1
         else
-          local k = math.min(budget - taken, n - 1)  -- never take the open tail
+          -- Partial take, bounded by BOTH remaining budgets; never take the
+          -- open tail line.
+          local k = 0
+          for i = 1, math.min(budget - taken, n - 1) do
+            if hbytes >= bbudget then
+              break
+            end
+            hbytes = hbytes + #seg.raw[i] + 1
+            k = i
+          end
           if k < 1 then
             break
           end
@@ -472,50 +567,70 @@ local function trim(c)
     end
     c.head_segs = head
     c.head_nlines = taken
+    c.head_nbytes = hbytes
     tail_total = tail_total - taken
+    tail_bytes = tail_bytes - hbytes
   end
 
-  -- Drop from the front of the tail until head + tail fits the cap.
+  -- Drop from the front of the tail until the line AND byte budgets both fit
+  -- (both budgets cover head + tail, mirroring each other's semantics).
   local excess = c.head_nlines + tail_total - cap
+  local bexcess = bcap > 0 and ((c.head_nbytes or 0) + tail_bytes - bcap) or 0
   local dropped = 0
-  while excess > 0 and #c.segments > 0 do
-    local seg = c.segments[1]
+  while (excess > 0 or bexcess > 0) and first <= nsegs do
+    local seg = segments[first]
     if seg.kind == 'image' then
       -- Exempt: relocate before the elided region.
-      c.head_segs[#c.head_segs + 1] = table.remove(c.segments, 1)
+      c.head_segs[#c.head_segs + 1] = seg
+      first = first + 1
     else
       local n = seg_nlines(seg)
-      local is_last = #c.segments == 1
-      if n <= excess and not is_last then
-        table.remove(c.segments, 1)
-        dropped = dropped + n
-        excess = excess - n
+      local is_last = first == nsegs
+      local limit = n - (is_last and 1 or 0)  -- never drop the open tail line
+      local k, freed = 0, 0
+      while k < limit and (excess - k > 0 or bexcess - freed > 0) do
+        freed = freed + #seg.raw[k + 1] + 1
+        k = k + 1
+      end
+      if k < 1 then
+        break
+      end
+      excess = excess - k
+      bexcess = bexcess - freed
+      dropped = dropped + k
+      if k >= n and not is_last then
+        -- Every display line dropped: the segment goes entirely (any trailing
+        -- '' raw entry goes with it).
+        first = first + 1
       else
-        local k = math.min(excess, n - (is_last and 1 or 0))
-        if k < 1 then
-          break
-        end
         local rest = {}
         for i = k + 1, #seg.raw do
           rest[#rest + 1] = seg.raw[i]
         end
         seg.raw = rest
-        dropped = dropped + k
-        excess = excess - k
         break
       end
     end
   end
+  if first > 1 then
+    local survivors = {}
+    for i = first, nsegs do
+      survivors[#survivors + 1] = segments[i]
+    end
+    c.segments = survivors
+  end
   c.dropped = c.dropped + dropped
 
-  -- Reset the (approximate) trigger counter to the exact retained raw count.
-  local nraw = 0
+  -- Reset the (approximate) trigger counters to the exact retained values.
+  local nraw, nbytes = 0, 0
   for _, seg in ipairs(c.segments) do
     if seg.kind ~= 'image' then
       nraw = nraw + #seg.raw
+      nbytes = nbytes + seg_bytes(seg)
     end
   end
   c.nraw = nraw
+  c.nbytes = nbytes
 
   if dropped > 0 and not c.notified then
     c.notified = true
@@ -614,6 +729,7 @@ local function redraw(bufnr, cell_id)
   if not c then
     return
   end
+  sync_cell_pos(bufnr, c)
   c.last_draw = vim.loop.hrtime() / 1e6
   local lines = display_lines(c)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
@@ -688,10 +804,18 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
   -- Drop stored output for any earlier run whose range overlaps this one, so
   -- re-running a cell REPLACES its output instead of leaving a stale run that
   -- find_cell() could return (and so cell state does not grow unbounded).
-  -- Terminal-side image placements owned by dropped runs are freed.
+  -- Ranges are re-read from the extmarks first: after the user inserts/deletes
+  -- lines, the stored coordinates no longer match the rerun's freshly computed
+  -- ones, and a missed overlap here leaks the old run's retained lines and
+  -- terminal image placements. The dropped run's extmark is deleted explicitly
+  -- since it may have drifted outside the cleared range above.
   for id, c in pairs(s.cells) do
+    sync_cell_pos(bufnr, c)
     if c.start_line <= end_line and c.end_line >= start_line then
       free_cell_images(c)
+      if c.mark_id then
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
+      end
       s.cells[id] = nil
     end
   end
@@ -712,8 +836,10 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     cap = max_kept == nil and 10000 or max_kept,
     head_segs = nil,
     head_nlines = 0,
+    head_nbytes = 0,
     dropped = 0,
     nraw = 0,
+    nbytes = 0,
     notified = false,
   }
 end
@@ -750,11 +876,15 @@ function M.add(bufnr, cell_id, kind, text)
     c.nraw = c.nraw + 1
   end
   c.nraw = c.nraw + seg_append(last, text)
+  c.nbytes = c.nbytes + #text
   -- Retention: nraw is a cheap raw-entry trigger (>= tail display lines); the
   -- frozen head no longer lives in nraw, so it is added back here — otherwise
-  -- the retained total would drift up to head + cap + slack. The trim itself
-  -- recomputes exact counts.
-  if c.cap > 0 and c.head_nlines + c.nraw > c.cap + trim_slack(c.cap) then
+  -- the retained total would drift up to head + cap + slack. nbytes counts
+  -- appended chunk bytes, an overestimate of retained bytes when '\r' collapse
+  -- discarded repaints — firing trim early is safe, it recomputes exactly.
+  local bcap = c.cap * BYTES_PER_LINE
+  if c.cap > 0 and (c.head_nlines + c.nraw > c.cap + trim_slack(c.cap)
+      or c.nbytes > bcap + math.floor(bcap / 8)) then
     trim(c)
   end
   schedule(bufnr, cell_id)
@@ -823,6 +953,7 @@ function M.refresh_all_images(priority_bufnr, cursor_line)
   for bufnr in pairs(state) do
     if vim.api.nvim_buf_is_valid(bufnr) then
       for _, c in pairs(state[bufnr].cells) do
+        sync_cell_pos(bufnr, c)
         for _, seg in ipairs(seg_walk(c)) do
           if seg.kind == 'image' then
             local dist
@@ -874,6 +1005,7 @@ function M.clear_range(bufnr, start_line, end_line)
   local s = state[bufnr]
   if s then
     for id, c in pairs(s.cells) do
+      sync_cell_pos(bufnr, c)
       if c.end_line >= start_line and c.end_line <= end_line then
         free_cell_images(c)
         s.cells[id] = nil
@@ -890,6 +1022,7 @@ local function find_cell(bufnr, start_line, end_line)
   -- Return the most recent (highest cell_id) run whose anchor is in range.
   local best, best_id
   for id, c in pairs(s.cells) do
+    sync_cell_pos(bufnr, c)
     if c.end_line >= start_line and c.end_line <= end_line then
       if not best_id or id > best_id then
         best, best_id = c, id
