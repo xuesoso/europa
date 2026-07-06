@@ -64,8 +64,11 @@ Plug 'xuesoso/europa'
 
 Notebook mode is **on by default** on Neovim, so for Python there is nothing to
 enable — open a file, write a `# %%` cell, and press `,c`. For **inline
-figures** you need a terminal that speaks the kitty graphics protocol
-(**kitty**, **ghostty**, **WezTerm**) and, if you use tmux, one setting:
+figures** you need a terminal with kitty-graphics *virtual placement* support
+(**kitty** or **ghostty** — see
+[terminal compatibility](#terminal-compatibility-for-inline-figures); on other
+terminals figures fall back to the plotty pane or a text note automatically)
+and, if you use tmux, one setting:
 
 ```vim
 " ~/.vimrc / init.vim
@@ -191,9 +194,10 @@ show that they ran. Disable with `cmdline_notebook_exec_marker = 0`.
 **By default**, both **matplotlib** and **plotly** figures are drawn **inside
 the cell's output box** using the kitty graphics protocol (the same
 Unicode-placeholder mechanism as plotty's kitty renderer, so it survives tmux
-and SSH). This needs a terminal that **speaks the kitty graphics protocol** —
-for example **kitty**, **ghostty**, or **WezTerm** — plus `:set termguicolors`.
-Adjust or change the routing in your vimrc:
+and SSH). This needs a terminal that implements kitty-graphics **virtual
+placements** — **kitty** or **ghostty**; see
+[terminal compatibility](#terminal-compatibility-for-inline-figures) — plus
+`:set termguicolors`. Adjust or change the routing in your vimrc:
 
 ```vim
 let cmdline_notebook_figures     = 'inline'   " default ('plotty' = tmux pane, 'none' = off)
@@ -233,23 +237,48 @@ let cmdline_notebook_figures = 'plotty'   " sixel or kitty, in a tmux pane
 | **Inline** (default) | kitty only | ✅ (`allow-passthrough on`) | ❌ | ✅ | ✅ |
 | **[plotty] pane** | sixel *or* kitty | ✅ (tmux required) | ✅ (sixel only) | ✅ | ✅ |
 
-> **⚠ Terminal without the kitty graphics protocol?** Inline figures need a
-> terminal that implements kitty-graphics *virtual placements* (kitty,
-> ghostty). Since figures default to inline, europa detects the terminal:
-> inside tmux it asks tmux for the **attached client's** terminal
-> (`#{client_termname}`, so re-attaching from a different terminal is seen
-> correctly); otherwise it checks `KITTY_WINDOW_ID`/`GHOSTTY_*` and `TERM`
-> (which ssh forwards). On a terminal that fails the check (iTerm2,
-> Terminal.app, xterm, foot, Konsole, …) figures **fall back automatically**:
-> to the **[plotty] pane** when you are inside tmux and plotty is installed
-> for the kernel's python, else to a `[figure not displayed: …]` note —
-> never raw escape data. Two overrides:
-> `let cmdline_notebook_kitty_terms = ['kitty', 'ghostty', 'myterm']`
-> replaces the terminal-name allowlist (for terminals that ship
-> virtual-placement support the default cannot know about), and an explicit
-> `let cmdline_notebook_figures = 'inline'` skips the detection entirely.
-> Nested tmux carries images only over **sixel**, so it needs the plotty
-> pane too. `:checkhealth europa` reports what your setup supports.
+> **⚠ Not on kitty or ghostty?** europa detects the terminal at kernel start
+> and figures fall back automatically — to the [plotty] pane, or to a
+> `[figure not displayed: …]` note — never raw escape data. See the
+> compatibility table below. Nested tmux carries images only over **sixel**,
+> so it needs the plotty pane too. `:checkhealth europa` reports what your
+> setup supports.
+
+#### Terminal compatibility for inline figures
+
+Inline display uses a specific **subset** of the kitty graphics protocol:
+*virtual placements* (`U=1`) with **Unicode placeholder** cells. The
+placeholders are plain text living in Neovim `virt_lines`, which is what lets
+figures sit inside the output box, survive scrolling and redraws, and pass
+through tmux — but far fewer terminals implement this subset than the base
+protocol. "Speaks kitty graphics" is **not** sufficient:
+
+| Terminal | Inline figures | Figures still work via |
+|---|---|---|
+| **kitty** | ✅ | — |
+| **Ghostty** | ✅ | — |
+| **WezTerm** | ❌ base kitty protocol only, no virtual placements | [plotty] pane (sixel) |
+| **Konsole** | ❌ partial kitty protocol, no placeholders | [plotty] pane (sixel) |
+| **iTerm2** | ❌ own image protocol | [plotty] pane (sixel) |
+| **foot** | ❌ sixel only | [plotty] pane |
+| **xterm** | ❌ sixel only (when enabled) | [plotty] pane |
+| **Alacritty**, **Terminal.app** | ❌ no terminal graphics | text note only |
+
+europa detects which case you are in at kernel start — inside tmux it asks
+tmux for the **attached client's** terminal (`#{client_termname}`), so
+re-attaching from a different terminal is judged by what is actually attached;
+otherwise it checks `KITTY_WINDOW_ID`/`GHOSTTY_*` and `TERM` (forwarded by
+ssh) — and **falls back automatically**: to the plotty pane when inside tmux
+with [plotty] installed for the kernel's python, else to a
+`[figure not displayed: …]` note. Two overrides:
+
+```vim
+" A terminal that ships virtual-placement support the default list cannot
+" know about (REPLACES the list; matched as substrings):
+let cmdline_notebook_kitty_terms = ['kitty', 'ghostty', 'myterm']
+" Skip the detection entirely and force inline:
+let cmdline_notebook_figures = 'inline'
+```
 
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
 [{height}]` (height in rows; omit it to keep the image's aspect ratio)
@@ -275,8 +304,10 @@ blank out first. To keep everything visible at once, lower
 `cmdline_notebook_figure_dpi`, use smaller figures, or clear cells you no
 longer need (`,K` / `:CmdLineNotebookClearAll`).
 
-Requirements for inline: a terminal that speaks the **kitty graphics protocol**
-(e.g. **kitty**, **ghostty**, **WezTerm**), `:set termguicolors`, and inside
+Requirements for inline: a terminal with kitty-graphics **virtual placement**
+support (**kitty**, **ghostty** — see the
+[compatibility table](#terminal-compatibility-for-inline-figures) above),
+`:set termguicolors`, and inside
 tmux ≥ 3.3 `set -g allow-passthrough on`. Sixel cannot be used here — it cannot
 be anchored to buffer cells, which is
 exactly why plotty renders sixel in a dedicated pane. **Nested tmux is not
@@ -443,7 +474,7 @@ same cells N times would just duplicate their side effects.
 | `cmdline_in_buffer` | `1` (Neovim) | Run the interpreter in a Neovim terminal buffer (else tmux) |
 | `cmdline_term_height` | `15` | Initial height of the interpreter window/pane |
 | `cmdline_term_width` | `40` | Initial width of the interpreter window/pane |
-| `cmdline_tmp_dir` | `/tmp/cmdline_<time>_<user>` | Temp directory for files sourced by the interpreter |
+| `cmdline_tmp_dir` | _(private per-session dir)_ | Temp directory for files sourced by the interpreter. The default derives from `tempname()` (unique, mode `0700`, removed on exit); a user-set dir is left in place, with only its `lines.*` interchange files cleaned up |
 | `cmdline_outhl` | `1` | Syntax-highlight the interpreter output (Neovim) |
 | `cmdline_auto_scroll` | `1` | Keep the cursor at the end of the terminal (Neovim) |
 | `cmdline_block_sep` | `'# %%'` | Separator line delimiting code blocks/cells |
@@ -487,7 +518,8 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
 | `cmdline_notebook_exec_marker` | `1` | Mark each executed cell with `✓ [N]` (`✗ [N]` on error) in the output border / as a rule line, where `N` is the execution count |
-| `cmdline_notebook_figures` | `'inline'` | Figure routing: `'inline'` (kitty graphics drawn inside the cell output), `'plotty'` (tmux pane), or `'none'`. An explicit legacy `cmdline_notebook_plotty` still wins when this is unset |
+| `cmdline_notebook_figures` | `'inline'` | Figure routing: `'inline'` (kitty graphics drawn inside the cell output), `'plotty'` (tmux pane), or `'none'`. An explicit legacy `cmdline_notebook_plotty` still wins when this is unset. Setting `'inline'` explicitly skips the terminal detection |
+| `cmdline_notebook_kitty_terms` | `['kitty', 'ghostty']` | Terminal-name substrings the inline-figure gate treats as kitty-graphics capable (matched against `$TERM`, or tmux's `#{client_termname}` inside tmux). Setting it **replaces** the list — see [terminal compatibility](#terminal-compatibility-for-inline-figures) |
 | `cmdline_notebook_figure_size` | `50` | Inline figure width in terminal columns (capped to the window); applies live |
 | `cmdline_notebook_figure_rows` | `0` | Explicit inline figure height in rows; `0` keeps the image's aspect ratio; applies live |
 | `cmdline_notebook_figure_dpi` | `200` | Source resolution the kernel renders figures at: matplotlib dpi, and plotly's render scale (`dpi / 100`, so `200` → plotly scale 2×) |
