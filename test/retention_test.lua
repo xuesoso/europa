@@ -11,6 +11,7 @@
 --   nvim --headless -u NONE -N -l test/retention_test.lua
 vim.opt.rtp:prepend('.')
 vim.o.termguicolors = true
+vim.g.cmdline_notebook_figures = 'inline'  -- explicit opt-in: keep the kitty gate deterministic off-terminal
 vim.o.columns = 200
 vim.o.lines = 60
 local render = require('vimcmdline.notebook.render')

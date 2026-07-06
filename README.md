@@ -232,13 +232,19 @@ let cmdline_notebook_figures = 'plotty'   " sixel or kitty, in a tmux pane
 | **Inline** (default) | kitty only | ✅ (`allow-passthrough on`) | ❌ | ✅ | ✅ |
 | **[plotty] pane** | sixel *or* kitty | ✅ (tmux required) | ✅ (sixel only) | ✅ | ✅ |
 
-> **⚠ Terminal without the kitty graphics protocol?** Any terminal that speaks
-> it works for inline figures (kitty, ghostty, WezTerm, …); on terminals that
-> do not (e.g. xterm, foot, Konsole) the cell shows a `[figure not displayed:
-> …]` note instead of a plot. Nested tmux carries images only over **sixel**,
-> so it needs the plotty pane too. Switch either case with
-> `let cmdline_notebook_figures = 'plotty'`; `:checkhealth europa` reports what
-> your setup supports.
+> **⚠ Terminal without the kitty graphics protocol?** Inline figures need a
+> terminal that implements kitty-graphics *virtual placements* (kitty,
+> ghostty). Since figures default to inline, europa sniffs the environment
+> (`KITTY_WINDOW_ID`, `GHOSTTY_*`, `TERM` matching `kitty`/`ghostty` — these
+> survive tmux and ssh) and on any other terminal (iTerm2, Terminal.app,
+> xterm, foot, Konsole, …) falls back to a `[figure not displayed: …]` note
+> instead of spraying escape data. If your terminal speaks the protocol but
+> the sniff cannot see it, opt in explicitly with
+> `let cmdline_notebook_figures = 'inline'` — an explicit setting overrides
+> the detection. Nested tmux carries images only over **sixel**, so it needs
+> the plotty pane too. Switch either case with
+> `let cmdline_notebook_figures = 'plotty'`; `:checkhealth europa` reports
+> what your setup supports.
 
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
 [{height}]` (height in rows; omit it to keep the image's aspect ratio)

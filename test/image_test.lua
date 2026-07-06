@@ -9,6 +9,7 @@
 --   nvim --headless -u NONE -N -l test/image_test.lua
 vim.opt.rtp:prepend('.')
 vim.o.termguicolors = true
+vim.g.cmdline_notebook_figures = 'inline'  -- explicit opt-in: keep the kitty gate deterministic off-terminal
 local img = require('vimcmdline.notebook.image')
 local render = require('vimcmdline.notebook.render')
 
@@ -189,6 +190,50 @@ do
     writes[#writes]:find(string.format('i=%d', shown.id), 1, true) ~= nil, true)
 
   img._set_tty_writer(nil)
+end
+
+-- ---- terminal capability gate ------------------------------------------
+-- Figures default to 'inline', so supported() must refuse terminals that do
+-- not speak kitty graphics (env sniff) unless the user opted in explicitly.
+do
+  local saved = {
+    kitty = vim.env.KITTY_WINDOW_ID,
+    gres = vim.env.GHOSTTY_RESOURCES_DIR,
+    gbin = vim.env.GHOSTTY_BIN_DIR,
+    term = vim.env.TERM,
+    fig = vim.g.cmdline_notebook_figures,
+  }
+  vim.env.KITTY_WINDOW_ID = ''
+  vim.env.GHOSTTY_RESOURCES_DIR = ''
+  vim.env.GHOSTTY_BIN_DIR = ''
+  vim.env.TERM = 'xterm-256color'
+  vim.g.cmdline_notebook_figures = nil
+
+  local ok, why = img.supported()
+  check('gate_refuses_unknown_terminal', ok, false)
+  check('gate_reason_mentions_kitty',
+    why ~= nil and why:find('kitty', 1, true) ~= nil, true)
+
+  vim.g.cmdline_notebook_figures = 'inline'
+  check('gate_explicit_optin_overrides', (img.supported()), true)
+  vim.g.cmdline_notebook_figures = nil
+
+  vim.env.TERM = 'xterm-kitty'
+  check('gate_term_kitty_accepts', (img.supported()), true)
+  vim.env.TERM = 'xterm-256color'
+
+  vim.env.KITTY_WINDOW_ID = '3'
+  check('gate_kitty_window_id_accepts', (img.supported()), true)
+  vim.env.KITTY_WINDOW_ID = ''
+
+  vim.env.GHOSTTY_RESOURCES_DIR = '/tmp/ghostty-res'
+  check('gate_ghostty_accepts', (img.supported()), true)
+
+  vim.env.KITTY_WINDOW_ID = saved.kitty
+  vim.env.GHOSTTY_RESOURCES_DIR = saved.gres
+  vim.env.GHOSTTY_BIN_DIR = saved.gbin
+  vim.env.TERM = saved.term
+  vim.g.cmdline_notebook_figures = saved.fig
 end
 
 if fail > 0 then

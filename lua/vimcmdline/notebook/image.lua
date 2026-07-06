@@ -62,9 +62,12 @@ local DIACRITICS = {
 M.MAX_CELLS = #DIACRITICS  -- placeholder addressing limit per axis
 
 -- 24-bit image ids from a random per-session base so concurrent sessions (and
--- plotty's own pid-based 8-bit ids) do not collide. Wraps within 24 bits and
--- never allocates 0.
-math.randomseed(vim.loop.hrtime() % 2 ^ 31)
+-- plotty's own pid-based 8-bit ids) do not collide. The pid is folded into
+-- the seed: two nvim instances in panes of the same terminal window share one
+-- image-id namespace, and hrtime alone can coincide across near-simultaneous
+-- starts — a collision makes one session's transmission silently delete the
+-- other's figure. Wraps within 24 bits and never allocates 0.
+math.randomseed((vim.loop.hrtime() + vim.loop.os_getpid() * 1e6) % 2 ^ 31)
 local id_counter = math.random(0, 0xFFFF) * 256
 local function next_id()
   id_counter = (id_counter + 1) % 0x1000000
@@ -95,7 +98,18 @@ local function write_tty(bytes)
     return false, 'cannot reach terminal (v:stderr channel failed; /dev/tty: '
       .. tostring(oerr) .. ')'
   end
-  vim.loop.fs_write(fd, bytes, -1)
+  -- Write to completion: a tty can accept fewer bytes than offered, and a
+  -- short write here truncates the escape stream mid-sequence (garbling the
+  -- terminal far worse than a missing figure).
+  local pos = 0
+  while pos < #bytes do
+    local n = vim.loop.fs_write(fd, pos == 0 and bytes or bytes:sub(pos + 1), -1)
+    if type(n) ~= 'number' or n <= 0 then
+      vim.loop.fs_close(fd)
+      return false, 'short write to /dev/tty'
+    end
+    pos = pos + n
+  end
   vim.loop.fs_close(fd)
   return true
 end
@@ -120,19 +134,28 @@ end
 -- cols x rows cells under image id `iid` (plotty's _kitty_bytes, minus the
 -- placeholder grid — that goes into virt_lines instead of the tty).
 function M.transmission_bytes(iid, png, cols, rows, wrap)
-  local apcs = { string.format('\27_Ga=d,d=I,i=%d,q=2\27\\', iid) }
+  -- When wrapping for tmux the envelope is built directly: the only ESCs in
+  -- an APC are its framing (base64 payload and keys are ESC-free), so the
+  -- generic gsub in wrap_tmux — which would rescan every payload chunk — is
+  -- unnecessary here. The byte output is identical.
+  local out = {}
+  local function push(keys, chunk)
+    if wrap then
+      out[#out + 1] = '\27Ptmux;\27\27_G' .. keys .. ';' .. chunk
+        .. '\27\27\\\27\\'
+    else
+      out[#out + 1] = '\27_G' .. keys .. ';' .. chunk .. '\27\\'
+    end
+  end
+  local del = string.format('\27_Ga=d,d=I,i=%d,q=2\27\\', iid)
+  out[1] = wrap and wrap_tmux(del) or del
   local payload = b64encode(png)
   local head = string.format('a=T,U=1,q=2,f=100,t=d,i=%d,c=%d,r=%d', iid, cols, rows)
   local n = math.max(math.ceil(#payload / 4096), 1)
   for k = 1, n do
     local chunk = payload:sub((k - 1) * 4096 + 1, k * 4096)
     local more = k < n and 1 or 0
-    local keys = (k == 1) and (head .. ',m=' .. more) or ('m=' .. more)
-    apcs[#apcs + 1] = '\27_G' .. keys .. ';' .. chunk .. '\27\\'
-  end
-  local out = {}
-  for _, apc in ipairs(apcs) do
-    out[#out + 1] = wrap and wrap_tmux(apc) or apc
+    push((k == 1) and (head .. ',m=' .. more) or ('m=' .. more), chunk)
   end
   return table.concat(out)
 end
@@ -234,16 +257,41 @@ function M.in_nested_tmux()
   return nested_cache
 end
 
+-- Terminal sniff for kitty-graphics *virtual placement* support (kitty,
+-- ghostty). Environment-based: KITTY_WINDOW_ID/GHOSTTY_* survive tmux, and
+-- TERM=xterm-kitty|xterm-ghostty propagates over ssh. WezTerm is deliberately
+-- absent — it implements parts of the kitty protocol but not the Unicode
+-- placeholder/virtual placement path this module uses.
+function M.kitty_capable()
+  if (vim.env.KITTY_WINDOW_ID or '') ~= '' then
+    return true
+  end
+  if (vim.env.GHOSTTY_RESOURCES_DIR or '') ~= ''
+      or (vim.env.GHOSTTY_BIN_DIR or '') ~= '' then
+    return true
+  end
+  local term = vim.env.TERM or ''
+  return term:find('kitty', 1, true) ~= nil
+      or term:find('ghostty', 1, true) ~= nil
+end
+
 -- Capability gate for inline figures. Placeholders need the id in the RGB
 -- foreground, hence 'termguicolors'. The terminal itself must speak the kitty
--- graphics protocol (kitty/ghostty) — not probeable without a tty round-trip,
--- so that part is the user's opt-in via cmdline_notebook_figures='inline'.
+-- graphics protocol: since figures default to 'inline', that is verified with
+-- the environment sniff above — sending megabytes of APC data to iTerm2 or
+-- Terminal.app renders garbled placeholder cells instead of a graceful text
+-- note. A user who EXPLICITLY sets cmdline_notebook_figures='inline'
+-- overrides the sniff (e.g. a kitty-capable terminal it cannot see).
 function M.supported()
   if vim.fn.has('nvim-0.10') ~= 1 then
     return false, 'inline figures need Neovim 0.10+'
   end
   if not vim.o.termguicolors then
     return false, 'inline figures need :set termguicolors'
+  end
+  if not M.kitty_capable() and vim.g.cmdline_notebook_figures ~= 'inline' then
+    return false, 'terminal does not appear to support kitty graphics'
+        .. " (set cmdline_notebook_figures='inline' to force, or ='plotty')"
   end
   if M.in_nested_tmux() then
     return false, 'inline figures cannot pass through nested tmux'
@@ -260,6 +308,7 @@ end
 function M.show(png_path, iw, ih, want_cols, cell_aspect, want_rows)
   local ok, err = M.supported()
   if not ok then
+    os.remove(png_path)  -- the temp PNG is consumed either way; never leak it
     return nil, err
   end
   local f = io.open(png_path, 'rb')
@@ -342,6 +391,10 @@ function M.free(iid)
   end
   local wrap = (vim.env.TMUX or '') ~= ''
   pcall(write_tty, M.delete_bytes(iid, wrap))
+  -- Clear the per-figure highlight group (there is no delete API; emptying
+  -- it at least drops the attributes instead of accreting one permanent
+  -- group per figure over a long session).
+  pcall(vim.api.nvim_set_hl, 0, string.format('CmdlineNotebookImg_%06X', iid), {})
 end
 
 return M

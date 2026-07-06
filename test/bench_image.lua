@@ -11,6 +11,7 @@
 --   nvim --headless -u NONE -N -l test/bench_image.lua
 vim.opt.rtp:prepend('.')
 vim.o.termguicolors = true
+vim.g.cmdline_notebook_figures = 'inline'  -- explicit opt-in: keep the kitty gate deterministic off-terminal
 local img = require('vimcmdline.notebook.image')
 local render = require('vimcmdline.notebook.render')
 
