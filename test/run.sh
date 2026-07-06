@@ -55,6 +55,9 @@ echo "== inline figures: larger placement in the output popup =="
 echo "== inline figures: terminal gate fallback (plotty pane / text) =="
 "$NVIM" --headless -u NONE -N -l test/figures_fallback.lua || rc=1
 
+echo "== inline figures: default-config gate refuses incapable terminal =="
+"$NVIM" --headless -u NONE -N -l test/figures_gate_default.lua || rc=1
+
 echo "== retention: elision equivalence/invariants, flat streaming cost =="
 "$NVIM" --headless -u NONE -N -l test/retention_test.lua || rc=1
 

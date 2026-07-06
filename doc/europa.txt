@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.5.0
+Version:         2.5.1
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================

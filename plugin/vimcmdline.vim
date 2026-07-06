@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.5.0
+" Version: 2.5.1
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.5.0"
+let g:cmdline_version = "2.5.1"
 
 " Set option
 if has("nvim")
@@ -71,6 +71,14 @@ let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 1)
 " needs kitty/ghostty + termguicolors), 'plotty' (tmux pane), or 'none'. When
 " unset, an EXPLICIT legacy g:cmdline_notebook_plotty still wins for
 " back-compat (1 => 'plotty', 0 => 'none').
+"
+" Record whether the user EXPLICITLY chose a route BEFORE materializing the
+" default below. The inline-figure gate treats an explicit 'inline' as a
+" deliberate override of terminal detection; without this flag it could not
+" tell that apart from the materialized default (both make the global
+" 'inline'), so the override fired for everyone and the gate never refused an
+" incapable terminal.
+let g:cmdline_notebook_figures_explicit = exists('g:cmdline_notebook_figures') ? 1 : 0
 if !exists('g:cmdline_notebook_figures')
     if exists('g:cmdline_notebook_plotty')
         let g:cmdline_notebook_figures = g:cmdline_notebook_plotty ? 'plotty' : 'none'

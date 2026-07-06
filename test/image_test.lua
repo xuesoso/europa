@@ -205,6 +205,7 @@ do
     term = vim.env.TERM,
     tmux = vim.env.TMUX,
     fig = vim.g.cmdline_notebook_figures,
+    figx = vim.g.cmdline_notebook_figures_explicit,
     pats = vim.g.cmdline_notebook_kitty_terms,
   }
   vim.env.KITTY_WINDOW_ID = ''
@@ -212,17 +213,25 @@ do
   vim.env.GHOSTTY_BIN_DIR = ''
   vim.env.TERM = 'xterm-256color'
   vim.env.TMUX = ''  -- isolate from the ambient tmux session, if any
-  vim.g.cmdline_notebook_figures = nil
+  -- Baseline mirrors the PRODUCTION default: plugin/vimcmdline.vim materializes
+  -- cmdline_notebook_figures='inline' for everyone, with the _explicit flag 0
+  -- when the user did not choose it. Testing against a nil global (as an
+  -- earlier version did) never happens at runtime and hid a gate-bypass bug:
+  -- the override must key on _explicit, not on the value alone.
+  vim.g.cmdline_notebook_figures = 'inline'
+  vim.g.cmdline_notebook_figures_explicit = 0
   vim.g.cmdline_notebook_kitty_terms = nil
 
   local ok, why = img.supported()
-  check('gate_refuses_unknown_terminal', ok, false)
+  check('gate_refuses_unknown_terminal_default', ok, false)
   check('gate_reason_mentions_kitty',
     why ~= nil and why:find('kitty', 1, true) ~= nil, true)
 
-  vim.g.cmdline_notebook_figures = 'inline'
+  -- EXPLICIT inline (user chose it) overrides detection; the materialized
+  -- default above (same value, _explicit=0) must NOT.
+  vim.g.cmdline_notebook_figures_explicit = 1
   check('gate_explicit_optin_overrides', (img.supported()), true)
-  vim.g.cmdline_notebook_figures = nil
+  vim.g.cmdline_notebook_figures_explicit = 0
 
   vim.env.TERM = 'xterm-kitty'
   check('gate_term_kitty_accepts', (img.supported()), true)
@@ -266,6 +275,7 @@ do
   vim.env.TERM = saved.term
   vim.env.TMUX = saved.tmux
   vim.g.cmdline_notebook_figures = saved.fig
+  vim.g.cmdline_notebook_figures_explicit = saved.figx
   vim.g.cmdline_notebook_kitty_terms = saved.pats
 end
 

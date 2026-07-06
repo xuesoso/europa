@@ -323,6 +323,18 @@ function M.kitty_capable()
   return term_matches(vim.env.TERM or '')
 end
 
+-- True only when the user EXPLICITLY set cmdline_notebook_figures='inline' —
+-- a deliberate override of terminal detection. This must NOT match the
+-- materialized default: plugin/vimcmdline.vim sets the global to 'inline' for
+-- everyone who did not choose a route, so testing the VALUE alone would treat
+-- every default install as a forced override and the gate below would never
+-- refuse an incapable terminal. cmdline_notebook_figures_explicit records
+-- whether the global existed before that default was applied.
+local function inline_forced()
+  return vim.g.cmdline_notebook_figures == 'inline'
+      and vim.g.cmdline_notebook_figures_explicit == 1
+end
+
 -- Capability gate for inline figures. Placeholders need the id in the RGB
 -- foreground, hence 'termguicolors'. The terminal itself must speak the kitty
 -- graphics protocol: since figures default to 'inline', that is verified with
@@ -337,7 +349,7 @@ function M.supported()
   if not vim.o.termguicolors then
     return false, 'inline figures need :set termguicolors'
   end
-  if not M.kitty_capable() and vim.g.cmdline_notebook_figures ~= 'inline' then
+  if not M.kitty_capable() and not inline_forced() then
     return false, 'terminal does not appear to support kitty graphics'
         .. " (set cmdline_notebook_figures='inline' to force, or ='plotty')"
   end
