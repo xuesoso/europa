@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.4.0
+" Version: 2.5.0
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.4.0"
+let g:cmdline_version = "2.5.0"
 
 " Set option
 if has("nvim")
