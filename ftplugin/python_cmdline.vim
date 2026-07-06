@@ -20,10 +20,20 @@ if exists("g:cmdline_app")
     endfor
 endif
 
+" The stdin-settle sleeps below guard the tmux paste-buffer path, where a
+" separate process races the interpreter. A Neovim job channel delivers
+" input through the pty in order — nothing is lost while the interpreter
+" catches up — so the UI-blocking sleep (50ms PER LINE sent) is skipped.
+function! s:PythonNeedsWait()
+    return !(has('nvim') && get(g:cmdline_job, get(b:, 'cmdline_filetype', 'python'), 0))
+endfunction
+
 function! PythonSourceLines(lines)
     if exists("b:cmdline_ipython")
         call VimCmdLineSendCmd("%cpaste -q")
-        sleep 50m " Wait for IPython to read stdin
+        if s:PythonNeedsWait()
+            sleep 50m " Wait for IPython to read stdin
+        endif
         call VimCmdLineSendCmd(join(add(a:lines, '--'), b:cmdline_nl))
     elseif exists("b:cmdline_jupyter")
         " Use bracketed paste
@@ -31,7 +41,9 @@ function! PythonSourceLines(lines)
         call VimCmdLineSendCmd("\e[200~")
         call VimCmdLineSendCmd(a_block)
         call VimCmdLineSendCmd("\e[201~")
-        sleep 50m " Wait for console to read stdin
+        if s:PythonNeedsWait()
+            sleep 50m " Wait for console to read stdin
+        endif
         call VimCmdLineSendCmd(b:cmdline_nl)
     else
         call VimCmdLineSendCmd(join(add(a:lines, ''), b:cmdline_nl))
@@ -55,13 +67,17 @@ function! PythonSendLine()
         endwhile
         let lines += ['']
         call PythonSourceLines(lines)
-        exe idx
+        " Clamp: a def/class block reaching EOF leaves idx one past the last
+        " line, and `:exe {N}` past EOF is E16 in Vim (nvim clamps silently).
+        exe min([idx, line('$')])
         return
     endif
     if strlen(line) > 0 || b:cmdline_send_empty
         call VimCmdLineSendCmd(line)
     endif
-    sleep 50m "Wait for console to read stdin"
+    if s:PythonNeedsWait()
+        sleep 50m "Wait for console to read stdin"
+    endif
     call VimCmdLineDown()
 endfunction
 

@@ -4,8 +4,8 @@ if !exists("g:cmdline_job")
 endif
 
 function! GoSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.go")
-    call VimCmdLineSendCmd(". " . g:cmdline_tmp_dir . "/lines.go")
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.go")
+    call VimCmdLineSendCmd(". " . l:tmpf)
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -17,6 +17,5 @@ let b:cmdline_filetype = "go"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.go")'
 
 call VimCmdLineSetApp("go")

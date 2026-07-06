@@ -4,8 +4,8 @@ if !exists("g:cmdline_job")
 endif
 
 function! LispSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.lsp")
-    call VimCmdLineSendCmd('(load "' . g:cmdline_tmp_dir . '/lines.lsp")')
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.lsp")
+    call VimCmdLineSendCmd('(load "' . l:tmpf . '")')
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -17,6 +17,5 @@ let b:cmdline_filetype = "lisp"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.lsp")'
 
 call VimCmdLineSetApp("lisp")

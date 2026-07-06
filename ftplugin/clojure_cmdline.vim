@@ -4,8 +4,8 @@ if !exists("g:cmdline_job")
 endif
 
 function! ClojureSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.clj")
-    call VimCmdLineSendCmd('(load-file "' . g:cmdline_tmp_dir . '/lines.clj")')
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.clj")
+    call VimCmdLineSendCmd('(load-file "' . l:tmpf . '")')
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -17,6 +17,5 @@ let b:cmdline_filetype = "clojure"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.clj")'
 
 call VimCmdLineSetApp("clojure")

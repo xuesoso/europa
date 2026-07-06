@@ -71,6 +71,29 @@ local function refresh_status()
   end)
 end
 
+-- The statusline segment, rendered here and PUSHED into b:cmdline_nb_status
+-- whenever kernel state changes: the statusline function is then a plain
+-- variable read instead of a luaeval() per redraw (per cursor move).
+local function status_segment(b)
+  if not b or not b.handle then
+    return ''
+  end
+  if not b.ready then
+    return '  ⏳ kernel'
+  end
+  if b.busy_visible and b.pending > 0 then
+    local n = b.pending
+    return n > 1 and ('  ⟳ running +' .. (n - 1)) or '  ⟳ running'
+  end
+  return '  ● kernel'
+end
+
+local function push_status(bufnr)
+  pcall(vim.api.nvim_buf_set_var, bufnr, 'cmdline_nb_status',
+        status_segment(buffers[bufnr]))
+  refresh_status()
+end
+
 -- Track the busy state with a short debounce so cells that finish quickly do
 -- not flicker the statusline busy/idle.
 local function note_busy_change(bufnr)
@@ -80,7 +103,7 @@ local function note_busy_change(bufnr)
   end
   if b.pending > 0 then
     if b.busy_visible then
-      refresh_status() -- still busy, queue count changed
+      push_status(bufnr) -- still busy, queue count changed
     elseif not b.busy_timer then
       b.busy_timer = true
       vim.defer_fn(function()
@@ -89,14 +112,14 @@ local function note_busy_change(bufnr)
           bb.busy_timer = false
           if bb.pending > 0 then
             bb.busy_visible = true
-            refresh_status()
+            push_status(bufnr)
           end
         end
       end, 150)
     end
   elseif b.busy_visible then
     b.busy_visible = false
-    refresh_status()
+    push_status(bufnr)
   end
 end
 
@@ -168,7 +191,7 @@ function M.start(bufnr)
   })
   notify('starting Python kernel…')
   setup_autocmds(bufnr)
-  refresh_status()
+  push_status(bufnr)
   return true
 end
 
@@ -199,7 +222,7 @@ function M.stop(bufnr)
   render.clear_all(bufnr)
   set_flag(bufnr, 0)
   pcall(vim.api.nvim_del_augroup_by_name, 'vimcmdline_notebook_' .. bufnr)
-  refresh_status()
+  push_status(bufnr)
 end
 
 function M.restart(bufnr)
@@ -217,7 +240,7 @@ function M.restart(bufnr)
   render.clear_all(bufnr)
   b.handle.send({ type = 'restart' })
   notify('restarting kernel…')
-  refresh_status()
+  push_status(bufnr)
 end
 
 function M.interrupt(bufnr)
@@ -312,7 +335,7 @@ function M._on_event(bufnr, gen, ev)
     b.ready = true
     notify('kernel ready')
     M._flush_queue(bufnr)
-    refresh_status()
+    push_status(bufnr)
   elseif t == 'stream' then
     render.add(bufnr, ev.cell_id, ev.name == 'stderr' and 'stderr' or 'stdout', ev.text or '')
   elseif t == 'execute_result' then
@@ -398,7 +421,7 @@ function M._on_exit(bufnr, gen, code, stderr_tail)
     notify(msg, vim.log.levels.WARN)
   end
   set_flag(bufnr, 0)
-  refresh_status()
+  push_status(bufnr)
 end
 
 -- Apply the CURRENT g:cmdline_notebook_figure_* values to every active

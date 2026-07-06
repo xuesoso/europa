@@ -38,7 +38,26 @@ let g:cmdline_split_topleft = get(g:, 'cmdline_split_topleft', 0)
 let g:cmdline_esc_term = get(g:, 'cmdline_esc_term', 1)
 let g:cmdline_term_width = get(g:, 'cmdline_term_width', 40)
 let g:cmdline_term_height = get(g:, 'cmdline_term_height', 15)
-let g:cmdline_tmp_dir = get(g:, 'cmdline_tmp_dir', '/tmp/cmdline_' . localtime() . '_' . $USER)
+" Temp dir for interchange files (REPL source loads, notebook figure PNGs).
+" The default derives from tempname(): unique per session and created 0700
+" under the user's private temp tree — a fixed /tmp/cmdline_<epoch>_<user>
+" was predictable (symlink attacks), world-visible, and collided between two
+" sessions started within the same second. Only the derived default is
+" cleaned up recursively at exit; a user-provided dir is left in place.
+if exists('g:cmdline_tmp_dir')
+    let s:tmp_dir_owned = 0
+else
+    let g:cmdline_tmp_dir = tempname() . '_cmdline'
+    let s:tmp_dir_owned = 1
+endif
+augroup VimCmdLineCleanup
+    autocmd!
+    if s:tmp_dir_owned
+        autocmd VimLeave * if isdirectory(g:cmdline_tmp_dir) | call delete(g:cmdline_tmp_dir, 'rf') | endif
+    else
+        autocmd VimLeave * for s:tf in glob(g:cmdline_tmp_dir . '/lines.*', 0, 1) | call delete(s:tf) | endfor
+    endif
+augroup END
 let g:cmdline_outhl = get(g:, 'cmdline_outhl', 1)
 let g:cmdline_auto_scroll = get(g:, 'cmdline_auto_scroll', 1)
 let g:cmdline_block_sep = get(g:, 'cmdline_block_sep', '# %%')
@@ -86,7 +105,10 @@ let g:cmdline_notebook_airline_section = get(g:, 'cmdline_notebook_airline_secti
 let g:cmdline_job = {}
 let g:cmdline_termbuf = {}
 let g:cmdline_tmuxsname = {}
-let s:ftlist = split(glob(expand('<sfile>:h:h') . '/ftplugin/*'))
+" glob() as a LIST: split() on the string form breaks on any whitespace, so an
+" install path containing a space produced garbage filetype keys (and E716 on
+" every state-dict access thereafter).
+let s:ftlist = glob(expand('<sfile>:h:h') . '/ftplugin/*', 0, 1)
 
 if has('win32')
     " on windows
@@ -103,7 +125,36 @@ for s:ft in s:ftlist
 endfor
 unlet s:ftlist
 unlet s:ft
-let s:cmdline_app_pane = ''
+" tmux-pane mode state, one pane per filetype (a single shared pane conflated
+" concurrently running REPLs of different languages).
+let s:cmdline_app_pane = {}
+
+" State dicts are seeded from the shipped ftplugins above; a user-defined
+" ftplugin following the same contract (setting b:cmdline_filetype) gets its
+" entries created here instead of E716-ing on first access.
+function s:EnsureFtState(ftype)
+    if !has_key(g:cmdline_job, a:ftype)
+        let g:cmdline_job[a:ftype] = 0
+    endif
+    if !has_key(g:cmdline_termbuf, a:ftype)
+        let g:cmdline_termbuf[a:ftype] = ''
+    endif
+    if !has_key(g:cmdline_tmuxsname, a:ftype)
+        let g:cmdline_tmuxsname[a:ftype] = ''
+    endif
+endfunction
+
+" Write `lines` to a fresh temp file for ONE dispatch and return its path.
+" ftplugin source functions used a fixed per-language name, which raced
+" run-all-cells: the interpreter reads the file asynchronously, by which time
+" a later cell had already overwritten it (cells ran twice or not at all).
+let s:tmpfile_seq = 0
+function VimCmdLineWriteTmp(lines, name, ...)
+    let s:tmpfile_seq += 1
+    let l:path = g:cmdline_tmp_dir . '/' . a:name . '.' . s:tmpfile_seq
+    call writefile(a:lines, l:path, a:0 > 0 ? a:1 : '')
+    return l:path
+endfunction
 
 " Skip empty lines
 function VimCmdLineDown()
@@ -146,7 +197,9 @@ function VimCmdLineStart_ExTerm(app)
         endif
     endif
 
-    let g:cmdline_tmuxsname[b:cmdline_filetype] = "vcl" . localtime()
+    " The filetype in the session name keeps two REPLs started within the
+    " same second (different languages) from fighting over one tmux session.
+    let g:cmdline_tmuxsname[b:cmdline_filetype] = "vcl" . b:cmdline_filetype . localtime()
 
     let cnflines = ['set-option -g prefix C-a',
                 \ 'unbind-key C-b',
@@ -166,6 +219,15 @@ function VimCmdLineStart_ExTerm(app)
                 \ 'tmux -2 -f "' . g:cmdline_tmp_dir . '/tmux.conf' .
                 \ '" -L VimCmdLine new-session -s ' . g:cmdline_tmuxsname[b:cmdline_filetype] . ' ' . a:app)
     call system(cmd)
+    if v:shell_error
+        " A bad g:cmdline_external_term_cmd or missing terminal emulator used
+        " to fail silently, leaving a session name that every send would then
+        " trip over.
+        echohl WarningMsg
+        echomsg 'europa: failed to launch the external terminal: ' . cmd
+        echohl Normal
+        let g:cmdline_tmuxsname[b:cmdline_filetype] = ''
+    endif
 endfunction
 
 " Run the interpreter in a Tmux panel
@@ -192,13 +254,15 @@ function VimCmdLineStart_Tmux(app)
     let tcmd .= " " . a:app
     let slog = system(tcmd)
     if v:shell_error
-        exe 'echoerr ' . slog
+        " echoerr the VALUE: `exe 'echoerr ' . slog` parsed tmux's stderr as a
+        " Vim expression, yielding E121 garbage instead of the message.
+        echoerr slog
         return
     endif
-    let s:cmdline_app_pane = GetTmuxActivePane()
+    let s:cmdline_app_pane[b:cmdline_filetype] = GetTmuxActivePane()
     let slog = system("tmux select-pane -t " . g:cmdline_vim_pane)
     if v:shell_error
-        exe 'echoerr ' . slog
+        echoerr slog
         return
     endif
 endfunction
@@ -209,10 +273,15 @@ function VimCmdLineStart_Nvim(app)
     let thisft = b:cmdline_filetype
     let cmd_app = b:cmdline_app
     let cmdline_nl = b:cmdline_nl
-    let edbuf = bufname("%")
+    " Buffer NUMBER, not name: an unnamed buffer's name is '' and
+    " `sbuffer ''` splits the terminal buffer instead of returning to it.
+    let edbuf = bufnr("%")
     if g:cmdline_job[b:cmdline_filetype]
         return
     endif
+    " Scoped, not global: `set switchbuf=useopen` silently clobbered the
+    " user's option for the whole session.
+    let sb_save = &switchbuf
     set switchbuf=useopen
     if g:cmdline_vsplit
         if g:cmdline_term_width > 16 && g:cmdline_term_width < (winwidth(0) - 16)
@@ -245,24 +314,35 @@ function VimCmdLineStart_Nvim(app)
         tnoremap <buffer> <Esc> <C-\><C-n>
     endif
     if g:cmdline_outhl
-        exe 'runtime syntax/cmdlineoutput_' . a:app . '.vim'
+        " Key on the app's base name (the configured app may carry arguments
+        " or a full path), falling back to the filetype so e.g. 'gomacro' and
+        " 'lein repl' still load their language's output syntax file.
+        let outhl_name = fnamemodify(split(a:app)[0], ':t')
+        if empty(globpath(&rtp, 'syntax/cmdlineoutput_' . outhl_name . '.vim'))
+            let outhl_name = thisft
+        endif
+        exe 'runtime syntax/cmdlineoutput_' . outhl_name . '.vim'
     endif
     normal! G
     exe "sbuffer " . edbuf
+    let &switchbuf = sb_save
     stopinsert
 endfunction
 
 function VimCmdLineCreateMaps()
-    exe 'nmap <silent><buffer> ' . g:cmdline_map_send . ' :call VimCmdLineSendLine()<CR>'
-    exe 'nmap <silent><buffer> ' . g:cmdline_map_send_and_stay . ' :call VimCmdLineSendLineAndStay()<CR>'
-    exe 'vmap <silent><buffer> ' . g:cmdline_map_send .
+    " noremap for maps whose rhs is a direct :call — a user remap of ':' or
+    " of any rhs key must not break them. The cell maps below stay `nmap`:
+    " a <Plug> rhs only resolves through remapping.
+    exe 'nnoremap <silent><buffer> ' . g:cmdline_map_send . ' :call VimCmdLineSendLine()<CR>'
+    exe 'nnoremap <silent><buffer> ' . g:cmdline_map_send_and_stay . ' :call VimCmdLineSendLineAndStay()<CR>'
+    exe 'xnoremap <silent><buffer> ' . g:cmdline_map_send .
                 \ ' <Esc>:call VimCmdLineSendSelection()<CR>'
     if exists("b:cmdline_source_fun")
-        exe 'nmap <silent><buffer> ' . g:cmdline_map_source_fun .
+        exe 'nnoremap <silent><buffer> ' . g:cmdline_map_source_fun .
                     \ ' :call b:cmdline_source_fun(getline(1, "$"))<CR>'
-        exe 'nmap <silent><buffer> ' . g:cmdline_map_send_paragraph .
+        exe 'nnoremap <silent><buffer> ' . g:cmdline_map_send_paragraph .
                     \ ' :call VimCmdLineSendParagraph()<CR>'
-        exe 'nmap <silent><buffer> ' . g:cmdline_map_send_block .
+        exe 'nnoremap <silent><buffer> ' . g:cmdline_map_send_block .
                     \ ' :call VimCmdLineSendMBlock()<CR>'
         " Code-block (g:cmdline_block_sep, default '# %%') mappings
         exe 'nmap <silent><buffer> ' . g:cmdline_map_exec_block .
@@ -277,7 +357,7 @@ function VimCmdLineCreateMaps()
                     \ ' <Plug>(cmdline-prev-cell)'
     endif
     if exists("b:cmdline_quit_cmd")
-        exe 'nmap <silent><buffer> ' . g:cmdline_map_quit . ' :call VimCmdLineQuit("' . b:cmdline_filetype . '")<CR>'
+        exe 'nnoremap <silent><buffer> ' . g:cmdline_map_quit . ' :call VimCmdLineQuit("' . b:cmdline_filetype . '")<CR>'
     endif
 endfunction
 
@@ -287,11 +367,21 @@ function VimCmdLineStartApp()
         echomsg 'There is no application defined to be executed for file of type "' . b:cmdline_filetype . '".'
         return
     endif
+    call s:EnsureFtState(b:cmdline_filetype)
 
     call VimCmdLineCreateMaps()
 
     if !isdirectory(g:cmdline_tmp_dir)
-        call mkdir(g:cmdline_tmp_dir)
+        try
+            " 'p' + 0700: create intermediate dirs, keep interchange files
+            " (source loads, figure PNGs) private to the user.
+            call mkdir(g:cmdline_tmp_dir, 'p', 0700)
+        catch
+            echohl WarningMsg
+            echomsg 'europa: cannot create temp dir ' . g:cmdline_tmp_dir
+            echohl Normal
+            return
+        endtry
     endif
 
     if get(b:, 'cmdline_notebook', 0)
@@ -314,13 +404,14 @@ endfunction
 function VimCmdLineSendCmd(...)
     if g:cmdline_job[b:cmdline_filetype]
         if g:cmdline_auto_scroll && (!exists('b:cmdline_quit_cmd') || a:1 != b:cmdline_quit_cmd)
-            let isnormal = mode() ==# 'n'
-            let curwin = winnr()
-            exe "sb " . g:cmdline_termbuf[b:cmdline_filetype]
-            call cursor('$', 1)
-            exe curwin . 'wincmd w'
-            if isnormal
-                stopinsert
+            " win_execute scrolls the terminal window WITHOUT a focus round
+            " trip: the old sb/wincmd-w dance ran every other plugin's
+            " WinEnter/WinLeave/BufEnter autocmds twice per line sent. When
+            " the terminal is not visible in any window there is nothing to
+            " scroll (sending no longer yanks a window open).
+            let termwin = bufwinid(g:cmdline_termbuf[b:cmdline_filetype])
+            if termwin > 0
+                call win_execute(termwin, 'normal! G')
             endif
         endif
         if exists('*chansend')
@@ -341,16 +432,20 @@ function VimCmdLineSendCmd(...)
                 echohl WarningMsg
                 echomsg 'Failed to send command. Is "' . b:cmdline_app . '" running?'
                 echohl Normal
-                unlet g:cmdline_tmuxsname[b:cmdline_filetype]
+                " Assign '', never :unlet — removing the KEY made every later
+                " access (the next send, restart, even loading another file
+                " of this filetype) throw E716.
+                let g:cmdline_tmuxsname[b:cmdline_filetype] = ''
             endif
-        elseif s:cmdline_app_pane != ''
-            let scmd = "tmux set-buffer '" . str . "\<C-M>' && tmux paste-buffer -t " . s:cmdline_app_pane
+        elseif get(s:cmdline_app_pane, b:cmdline_filetype, '') != ''
+            let scmd = "tmux set-buffer '" . str . "\<C-M>' && tmux paste-buffer -t "
+                        \ . s:cmdline_app_pane[b:cmdline_filetype]
             call system(scmd)
             if v:shell_error
                 echohl WarningMsg
                 echomsg 'Failed to send command. Is "' . b:cmdline_app . '" running?'
                 echohl Normal
-                let s:cmdline_app_pane = ''
+                let s:cmdline_app_pane[b:cmdline_filetype] = ''
             endif
         endif
     endif
@@ -389,8 +484,12 @@ endfunction
 function VimCmdLineSendSelection()
     if line("'<") == line("'>")
         let i = col("'<") - 1
-        let j = col("'>") - i
         let l = getline("'<")
+        " col("'>") is the byte index of the FIRST byte of the last selected
+        " character; extend by that character's full byte length so a
+        " selection ending on a multibyte char is not cut mid-sequence.
+        let lastc = matchstr(l[col("'>") - 1:], '.')
+        let j = col("'>") - i + strlen(lastc) - 1
         let line = strpart(l, i, j)
         if get(b:, 'cmdline_notebook', 0)
             call s:CmdLineCellSink([line], line("'>"))
@@ -459,13 +558,19 @@ endfunction
 function VimCmdLineQuit(ftype)
     if exists("b:cmdline_quit_cmd")
         call VimCmdLineSendCmd(b:cmdline_quit_cmd)
-        if g:cmdline_termbuf[a:ftype] != ""
+        " bufexists guard: the REPL process can end on its own (user typed
+        " quit() in the terminal) and the buffer be wiped afterwards — a
+        " stale name here made `sb` throw E94.
+        if g:cmdline_termbuf[a:ftype] != "" && bufexists(g:cmdline_termbuf[a:ftype])
+            let sb_save = &switchbuf
+            set switchbuf=useopen
             exe "sb " . g:cmdline_termbuf[a:ftype]
+            let &switchbuf = sb_save
             startinsert
-            let g:cmdline_termbuf[a:ftype] = ""
         endif
+        let g:cmdline_termbuf[a:ftype] = ""
         let g:cmdline_tmuxsname[a:ftype] = ""
-        let s:cmdline_app_pane = ''
+        let s:cmdline_app_pane[a:ftype] = ''
     else
         echomsg 'Quit command not defined for file of type "' . a:ftype . '".'
     endif
@@ -476,6 +581,10 @@ function s:VimCmdLineJobExit(job_id, data, etype)
     for ftype in keys(g:cmdline_job)
         if a:job_id == g:cmdline_job[ftype]
             let g:cmdline_job[ftype] = 0
+            " The terminal buffer name must go too: Quit would otherwise
+            " jump into a dead "[Process exited]" terminal (or E94 once the
+            " buffer is wiped).
+            let g:cmdline_termbuf[ftype] = ''
         endif
     endfor
 endfunction
@@ -489,7 +598,9 @@ function VimCmdLineSetApp(ftype)
             endif
         endfor
     endif
-    if g:cmdline_job[b:cmdline_filetype] || g:cmdline_tmuxsname[b:cmdline_filetype] != "" || s:cmdline_app_pane != ''
+    call s:EnsureFtState(b:cmdline_filetype)
+    if g:cmdline_job[b:cmdline_filetype] || g:cmdline_tmuxsname[b:cmdline_filetype] != ""
+                \ || get(s:cmdline_app_pane, b:cmdline_filetype, '') != ''
         call VimCmdLineCreateMaps()
     endif
 endfunction
@@ -652,7 +763,15 @@ function! s:CmdLineCellSink(lines, endline)
         endif
         call v:lua.require'vimcmdline.notebook'.execute_cell(bufnr('%'), a:endline, a:lines)
     else
-        call b:cmdline_source_fun(a:lines)
+        " The cell commands are defined globally; in a buffer with no cmdline
+        " ftplugin there is no source function — say so instead of E121.
+        if exists('b:cmdline_source_fun')
+            call b:cmdline_source_fun(a:lines)
+        else
+            echohl WarningMsg
+            echomsg 'europa: no interpreter configured for filetype "' . &filetype . '".'
+            echohl Normal
+        endif
     endif
 endfunction
 
@@ -851,13 +970,10 @@ if has('nvim') && g:cmdline_notebook_enable
         return [l:start, l:end]
     endfunction
 
-    function! VimCmdLineNotebookToggle()
-        if get(b:, 'cmdline_notebook', 0)
-            let b:cmdline_notebook = 0
-            call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
-            echomsg 'europa: notebook mode off'
-            return
-        endif
+    " Guarded enable, shared by the toggle and :CmdLineNotebookStart. The
+    " b:cmdline_notebook flag is set only AFTER the checks pass, so a refusal
+    " (no app, live REPL) cannot leave a stale flag/statusline behind.
+    function! s:NotebookEnable()
         if !exists("b:cmdline_app")
             echohl WarningMsg | echomsg 'europa: notebook mode is not supported for this filetype.' | echohl Normal
             return
@@ -868,6 +984,23 @@ if has('nvim') && g:cmdline_notebook_enable
         endif
         let b:cmdline_notebook = 1
         call VimCmdLineStartApp()
+    endfunction
+
+    function! VimCmdLineNotebookToggle()
+        if get(b:, 'cmdline_notebook', 0)
+            let b:cmdline_notebook = 0
+            call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
+            echomsg 'europa: notebook mode off'
+            return
+        endif
+        call s:NotebookEnable()
+    endfunction
+
+    function! VimCmdLineNotebookStart()
+        if get(b:, 'cmdline_notebook', 0)
+            return
+        endif
+        call s:NotebookEnable()
     endfunction
 
     function! VimCmdLineNotebookClear()
@@ -881,7 +1014,10 @@ if has('nvim') && g:cmdline_notebook_enable
     endfunction
 
     command! CmdLineNotebookToggle     call VimCmdLineNotebookToggle()
-    command! CmdLineNotebookStart      let b:cmdline_notebook = 1 | call VimCmdLineStartApp()
+    " Through the same guards as the toggle: the old inline `let b:...=1 |
+    " StartApp` bypassed the running-REPL check, attaching a kernel while the
+    " classic REPL still ran (silently diverting every send to the kernel).
+    command! CmdLineNotebookStart      call VimCmdLineNotebookStart()
     command! CmdLineNotebookStop       call v:lua.require'vimcmdline.notebook'.stop(bufnr('%'))
     command! CmdLineNotebookRestart    call v:lua.require'vimcmdline.notebook'.restart(bufnr('%'))
     command! CmdLineNotebookInterrupt  call v:lua.require'vimcmdline.notebook'.interrupt(bufnr('%'))
@@ -926,20 +1062,12 @@ if has('nvim') && g:cmdline_notebook_enable
     silent! call dictwatcheradd(g:, 'cmdline_notebook_figure_cell_aspect', function('s:CmdLineNotebookFigureWatch'))
 
     " Statusline segment: empty unless notebook mode is on for this buffer.
+    " A plain b: read — the segment string is PUSHED by the Lua side whenever
+    " the kernel state changes. The previous implementation ran one or two
+    " luaeval() string-compiles inside every statusline redraw (i.e. on every
+    " cursor move in a notebook buffer).
     function! VimCmdLineNotebookStatus() abort
-        if !get(b:, 'cmdline_notebook', 0)
-            return ''
-        endif
-        let l:s = luaeval("require('vimcmdline.notebook').status(_A)", bufnr('%'))
-        if l:s ==# 'ready'
-            return '  ● kernel'
-        elseif l:s ==# 'starting'
-            return '  ⏳ kernel'
-        elseif l:s ==# 'busy'
-            let l:n = luaeval("require('vimcmdline.notebook').pending(_A)", bufnr('%'))
-            return l:n > 1 ? printf('  ⟳ running +%d', l:n - 1) : '  ⟳ running'
-        endif
-        return ''
+        return get(b:, 'cmdline_nb_status', '')
     endfunction
 
     " Add the segment to the statusline (default on). A statusline manager such

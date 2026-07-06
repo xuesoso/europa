@@ -5,7 +5,11 @@ endif
 
 function! SageSourceLines(lines)
     call VimCmdLineSendCmd('%cpaste -q')
-    sleep 100m " Wait for IPython to read stdin
+    " Only the tmux paste-buffer path races the interpreter; a Neovim job
+    " channel delivers input in order, so skip the UI-blocking sleep there.
+    if !(has('nvim') && get(g:cmdline_job, get(b:, 'cmdline_filetype', 'sage'), 0))
+        sleep 100m " Wait for IPython to read stdin
+    endif
     call VimCmdLineSendCmd(join(add(a:lines, '--'), b:cmdline_nl))
 endfunction
 

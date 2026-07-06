@@ -4,11 +4,11 @@ if !exists("g:cmdline_job")
 endif
 
 function! OctaveSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.m")
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.m")
     if b:cmdline_app =~? "^matlab"
-        call VimCmdLineSendCmd('run("' . g:cmdline_tmp_dir . '/lines.m"); clear lines.m;')
+        call VimCmdLineSendCmd('run("' . l:tmpf . '"); clear lines.m;')
     else
-        call VimCmdLineSendCmd('source("' . g:cmdline_tmp_dir . '/lines.m");')
+        call VimCmdLineSendCmd('source("' . l:tmpf . '");')
     endif
 endfunction
 
@@ -21,6 +21,5 @@ let b:cmdline_filetype = "matlab"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.m")'
 
 call VimCmdLineSetApp("matlab")

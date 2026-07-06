@@ -4,8 +4,8 @@ if !exists('g:cmdline_job')
 endif
 
 function! Macaulay2SourceLines(lines)
-    call writefile(filter(a:lines, '!empty(v:val)'), g:cmdline_tmp_dir . '/lines.m2', 'b')
-    call VimCmdLineSendCmd('input "' . g:cmdline_tmp_dir . '/lines.m2"')
+    let l:tmpf = VimCmdLineWriteTmp(filter(a:lines, '!empty(v:val)'), "lines.m2", 'b')
+    call VimCmdLineSendCmd('input "' . l:tmpf . '"')
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -17,6 +17,5 @@ let b:cmdline_filetype = 'Macaulay2'
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.m2")'
 
 call VimCmdLineSetApp('Macaulay2')

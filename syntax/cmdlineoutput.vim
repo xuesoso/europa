@@ -13,6 +13,10 @@ syn match cmdlineNormal "."
 " Strings
 if exists('b:syn_string_delimiter')
     for dlmtr in b:syn_string_delimiter
+        " Escape the pattern delimiter: a '/' (or backslash) in a configured
+        " string delimiter would otherwise terminate the /.../ pattern early
+        " and break the :syn command.
+        let dlmtr = escape(dlmtr, '/')
         exe 'syn region cmdlineString start=/' . dlmtr . '/ skip=/\\\\\|\\'
                     \ . dlmtr . '/ end=/' . dlmtr . '/ end=/$/'
     endfor
@@ -98,7 +102,7 @@ function s:SetColor(cgroup, hicolor, cgui, c256, c16)
         let hc = get(g:, 'cmdline_color_' . a:hicolor, '1')
         if hc =~? '^#[a-f0-9]\{6}$'
             exe 'hi cmdline' . a:cgroup . ' guifg=' . hc
-        elseif hc =~# '^[0-9]*$'
+        elseif hc =~# '^[0-9]\+$'
             exe 'hi cmdline' . a:cgroup . ' ctermfg=' . hc
         else
             exe 'hi cmdline' . a:cgroup . ' ' . hc

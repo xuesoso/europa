@@ -5,8 +5,8 @@ endif
 
 " Write a temp file and source this temp file
 function! KdbSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.q")
-    call VimCmdLineSendCmd("\\l " . g:cmdline_tmp_dir . "/lines.q")
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.q")
+    call VimCmdLineSendCmd("\\l " . l:tmpf)
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -21,6 +21,5 @@ let b:cmdline_filetype = "kdb"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.q")'
 
 call VimCmdLineSetApp("kdb")

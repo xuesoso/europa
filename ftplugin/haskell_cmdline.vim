@@ -4,8 +4,8 @@ if !exists("g:cmdline_job")
 endif
 
 function! HaskellSourceLines(lines)
-    call writefile(a:lines, g:cmdline_tmp_dir . "/lines.hs")
-    call VimCmdLineSendCmd(":load " . g:cmdline_tmp_dir . "/lines.hs")
+    let l:tmpf = VimCmdLineWriteTmp(a:lines, "lines.hs")
+    call VimCmdLineSendCmd(":load " . l:tmpf)
 endfunction
 
 let b:cmdline_nl = "\n"
@@ -21,6 +21,5 @@ let b:cmdline_filetype = "haskell"
 
 exe 'nmap <buffer><silent> ' . g:cmdline_map_start . ' :call VimCmdLineStartApp()<CR>'
 
-exe 'autocmd VimLeave * call delete(g:cmdline_tmp_dir . "/lines.hs")'
 
 call VimCmdLineSetApp("haskell")
