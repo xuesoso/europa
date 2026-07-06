@@ -2,11 +2,16 @@
 -- by :checkhealth vimcmdline.
 local M = {}
 
--- Cache the (expensive) python import probe per interpreter.
+-- Cache the (expensive) python import probe per interpreter. Only SUCCESSES
+-- are cached: a user who sees "missing Python deps", pip-installs them, and
+-- retries must get a fresh probe, not the session-long stale failure.
 local _dep_cache = {}
 
--- Returns ok(bool), errmsg(string|nil).
-function M.check(cfg)
+-- Returns ok(bool), errmsg(string|nil). opts.skip_dep_probe skips the
+-- synchronous import probe (a ~0.5-1s UI freeze); the kernel bridge reports
+-- missing deps itself via a fatal bridge_error, so start paths can skip it
+-- while :checkhealth keeps the full check.
+function M.check(cfg, opts)
   if vim.fn.has('nvim-0.10') ~= 1 then
     return false, 'notebook mode requires Neovim 0.10+'
   end
@@ -14,13 +19,17 @@ function M.check(cfg)
   if vim.fn.executable(py) ~= 1 then
     return false, 'python executable not found: ' .. py
   end
-  if _dep_cache[py] == nil then
-    vim.fn.system({ py, '-c', 'import jupyter_client, ipykernel' })
-    _dep_cache[py] = (vim.v.shell_error == 0)
+  if opts and opts.skip_dep_probe then
+    return true, nil
   end
-  if not _dep_cache[py] then
-    return false, 'missing Python deps for "' .. py ..
-      '" — install with: pip install jupyter_client ipykernel plotty'
+  if _dep_cache[py] ~= true then
+    vim.fn.system({ py, '-c', 'import jupyter_client, ipykernel' })
+    if vim.v.shell_error == 0 then
+      _dep_cache[py] = true
+    else
+      return false, 'missing Python deps for "' .. py ..
+        '" — install with: pip install jupyter_client ipykernel plotty'
+    end
   end
   return true, nil
 end

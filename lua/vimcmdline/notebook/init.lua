@@ -119,20 +119,30 @@ function M.start(bufnr)
     return true
   end
   local cfg = config.read()
-  local ok, err = health.check(cfg)
+  -- Cheap checks only: the jupyter_client import probe is skipped here — it is
+  -- a synchronous ~0.5-1s UI freeze, and the bridge itself reports missing
+  -- deps via a fatal bridge_error moments later. :checkhealth keeps the probe.
+  local ok, err = health.check(cfg, { skip_dep_probe = true })
   if not ok then
     notify(err, vim.log.levels.WARN)
     set_flag(bufnr, 0)
     return false
   end
+  -- `gen` is this session's identity token. The spawn callbacks close over
+  -- it: a stopped bridge lives ~300ms past M.stop() and its exit/late events
+  -- arrive after a quick toggle-off/on has already installed a NEW session
+  -- under the same bufnr — without the token the old exit callback would tear
+  -- down the new session (orphaning its process) and old cell events would
+  -- render into the new session's cells (cell ids restart from 1).
+  local gen = {}
   local b = { ready = false, queue = {}, cell_seq = 0, cfg = cfg,
               pending = 0, busy_visible = false, busy_timer = false,
-              complete_seq = 0, completions = {} }
+              complete_seq = 0, completions = {}, gen = gen }
   buffers[bufnr] = b
   local handle, serr = bridge.spawn(
     cfg.python,
-    function(ev) M._on_event(bufnr, ev) end,
-    function(code) M._on_exit(bufnr, code) end
+    function(ev) M._on_event(bufnr, gen, ev) end,
+    function(code, stderr_tail) M._on_exit(bufnr, gen, code, stderr_tail) end
   )
   if not handle then
     notify(serr or 'failed to start kernel bridge', vim.log.levels.ERROR)
@@ -141,10 +151,12 @@ function M.start(bufnr)
     return false
   end
   b.handle = handle
-  local inline_ok = cfg.figures == 'inline' and image.supported() or false
-  if cfg.figures == 'inline' and not inline_ok then
-    local _, why = image.supported()
-    notify((why or 'inline figures unavailable') .. ' — falling back to text', vim.log.levels.WARN)
+  local inline_ok, why = false, nil
+  if cfg.figures == 'inline' then
+    inline_ok, why = image.supported()
+    if not inline_ok then
+      notify((why or 'inline figures unavailable') .. ' — falling back to text', vim.log.levels.WARN)
+    end
   end
   handle.send({
     type = 'hello',
@@ -160,10 +172,25 @@ function M.start(bufnr)
   return true
 end
 
+-- Resolve every in-flight completion callback with an empty result instead of
+-- dropping it: the contract (and blink_source) is "cb fires exactly once", and
+-- a dropped callback leaves the completion request hanging until blink times
+-- it out. Entries are {cb, cursor_pos}.
+local function flush_completions(b)
+  local cbs = b.completions
+  b.completions = {}
+  for _, entry in pairs(cbs) do
+    pcall(entry[1], {}, entry[2], entry[2])
+  end
+end
+
 function M.stop(bufnr)
   bufnr = resolve(bufnr)
   local b = buffers[bufnr]
   buffers[bufnr] = nil
+  if b then
+    flush_completions(b)
+  end
   if b and b.handle then
     pcall(b.handle.send, { type = 'shutdown' })
     local handle = b.handle
@@ -186,7 +213,7 @@ function M.restart(bufnr)
   b.queue = {}
   b.pending = 0
   b.busy_visible = false
-  b.completions = {}  -- drop callbacks waiting on the pre-restart kernel
+  flush_completions(b)  -- resolve callbacks waiting on the pre-restart kernel
   render.clear_all(bufnr)
   b.handle.send({ type = 'restart' })
   notify('restarting kernel…')
@@ -218,7 +245,14 @@ function M.execute_cell(bufnr, end_line, lines)
                vim.bo[bufnr].filetype, b.cfg.max_kept)
   local req = { type = 'execute', cell_id = cell_id, code = table.concat(lines, '\n') }
   if b.ready then
-    b.handle.send(req)
+    -- chansend to a dying channel silently sends nothing; counting such a
+    -- cell as pending would stick the statusline at 'busy' with no reply
+    -- ever coming.
+    if not b.handle.send(req) then
+      render.add(bufnr, cell_id, 'error', 'kernel bridge unreachable — cell not executed')
+      render.mark_done(bufnr, cell_id, nil, 'error')
+      return
+    end
   else
     table.insert(b.queue, req)
   end
@@ -239,11 +273,22 @@ function M.complete(bufnr, code, cursor_pos, cb)
     cb({}, cursor_pos, cursor_pos)
     return
   end
+  -- A busy kernel cannot answer: complete_request rides the shell channel,
+  -- which serves FIFO behind the running execute_request, so the reply (and
+  -- with it the caller's completion menu) would stall until the cell
+  -- finishes. Resolve empty immediately instead of queueing per keystroke.
+  if b.pending > 0 then
+    cb({}, cursor_pos, cursor_pos)
+    return
+  end
   b.complete_seq = b.complete_seq + 1
   local req_id = b.complete_seq
-  b.completions[req_id] = cb
-  b.handle.send({ type = 'complete', req_id = req_id,
-                  code = code, cursor_pos = cursor_pos })
+  b.completions[req_id] = { cb, cursor_pos }
+  if not b.handle.send({ type = 'complete', req_id = req_id,
+                         code = code, cursor_pos = cursor_pos }) then
+    b.completions[req_id] = nil
+    cb({}, cursor_pos, cursor_pos)
+  end
 end
 
 function M._flush_queue(bufnr)
@@ -257,10 +302,10 @@ function M._flush_queue(bufnr)
   b.queue = {}
 end
 
-function M._on_event(bufnr, ev)
+function M._on_event(bufnr, gen, ev)
   local b = buffers[bufnr]
-  if not b then
-    return
+  if not b or b.gen ~= gen then
+    return  -- event from a previous session's bridge; not ours to handle
   end
   local t = ev.type
   if t == 'kernel_ready' then
@@ -314,28 +359,43 @@ function M._on_event(bufnr, ev)
     b.pending = math.max(b.pending - 1, 0)
     note_busy_change(bufnr)
   elseif t == 'complete_reply' then
-    local cb = b.completions[ev.req_id]
-    if cb then
+    local entry = b.completions[ev.req_id]
+    if entry then
       b.completions[ev.req_id] = nil
-      cb(ev.matches or {}, ev.cursor_start, ev.cursor_end)
+      entry[1](ev.matches or {}, ev.cursor_start, ev.cursor_end)
     end
   elseif t == 'bridge_error' then
     if ev.fatal then
       notify(ev.message or 'kernel error', vim.log.levels.ERROR)
       M.stop(bufnr)
     elseif ev.cell_id then
+      -- No execute_reply will follow this cell (the execute never reached the
+      -- kernel): finish it here or it stays 'busy'/unmarked forever.
       render.add(bufnr, ev.cell_id, 'error', ev.message or 'error')
+      render.mark_done(bufnr, ev.cell_id, nil, 'error')
+      b.pending = math.max(b.pending - 1, 0)
+      note_busy_change(bufnr)
+    else
+      notify(ev.message or 'kernel error', vim.log.levels.WARN)
     end
   end
 end
 
-function M._on_exit(bufnr, code)
-  if not buffers[bufnr] then
-    return
+function M._on_exit(bufnr, gen, code, stderr_tail)
+  local b = buffers[bufnr]
+  if not b or b.gen ~= gen then
+    return  -- a previous session's bridge finally exited; ours is unaffected
   end
   buffers[bufnr] = nil
+  flush_completions(b)
   if code and code ~= 0 then
-    notify('kernel bridge exited (code ' .. tostring(code) .. ')', vim.log.levels.WARN)
+    local msg = 'kernel bridge exited (code ' .. tostring(code) .. ')'
+    -- The bridge logs its failure reason to stderr; without it a crash is
+    -- undiagnosable from inside nvim.
+    if stderr_tail and #stderr_tail > 0 then
+      msg = msg .. '\n' .. table.concat(stderr_tail, '\n')
+    end
+    notify(msg, vim.log.levels.WARN)
   end
   set_flag(bufnr, 0)
   refresh_status()
@@ -516,11 +576,18 @@ function M.open_output(bufnr, start_line, end_line)
   -- budget matches popup_max_h, which the figure was fitted against — so the
   -- figure is never taller than the viewport.
   local cols, lns = vim.o.columns, vim.o.lines
+  -- Width scan stops at the cap: with 10k retained lines this loop is pure
+  -- vim.fn crossings, and past the cap the answer cannot change.
+  local wcap = math.floor(cols * 0.9)
   local maxw = 0
   for _, l in ipairs(text) do
     maxw = math.max(maxw, vim.fn.strdisplaywidth(l))
+    if maxw >= wcap then
+      maxw = wcap
+      break
+    end
   end
-  local width = math.max(math.min(maxw + 2, math.floor(cols * 0.9)), 20)
+  local width = math.max(math.min(maxw + 2, wcap), 20)
   local height = math.max(math.min(#text, popup_max_h + 2), 1)
   local win = vim.api.nvim_open_win(obuf, true, {
     relative = 'editor',

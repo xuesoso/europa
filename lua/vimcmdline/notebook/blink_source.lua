@@ -32,13 +32,22 @@ local KIND_FIELD = vim.lsp.protocol.CompletionItemKind.Field
 -- source, which carries signatures and docstrings.
 local function ends_in_string(s)
   local quote = nil
-  for i = 1, #s do
+  local i = 1
+  local n = #s
+  while i <= n do
     local c = string.sub(s, i, i)
     if quote then
-      if c == quote then quote = nil end
+      if c == '\\' then
+        i = i + 1        -- an escaped char never closes the string
+      elseif c == quote then
+        quote = nil
+      end
     elseif c == '"' or c == "'" then
       quote = c
+    elseif c == '#' then
+      return false       -- comment: an apostrophe in "# don't" is not code
     end
+    i = i + 1
   end
   return quote ~= nil
 end

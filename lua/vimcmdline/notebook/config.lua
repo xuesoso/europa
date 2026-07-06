@@ -21,9 +21,9 @@ function M.read()
   cfg.startup_code = gget('cmdline_notebook_startup_code', {})
   cfg.python = gget('cmdline_notebook_python', '')
   cfg.kernel_name = gget('cmdline_notebook_kernel_name', 'python3')
-  cfg.max_lines = gget('cmdline_notebook_max_lines', 20)
+  cfg.max_lines = tonumber(gget('cmdline_notebook_max_lines', 20)) or 20
   cfg.max_kept = tonumber(gget('cmdline_notebook_max_kept_lines', 10000)) or 10000
-  cfg.kernel_timeout = gget('cmdline_notebook_kernel_timeout', 30)
+  cfg.kernel_timeout = tonumber(gget('cmdline_notebook_kernel_timeout', 30)) or 30
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
   cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))

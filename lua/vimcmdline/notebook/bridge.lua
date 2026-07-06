@@ -21,7 +21,26 @@ function M.spawn(python, on_event, on_exit)
     return nil, 'kernel bridge script not found: ' .. script
   end
 
+  -- A newline-less writer on the protocol channel (a foreign fd inherited by
+  -- some subprocess) must not grow the carry buffer without bound, each chunk
+  -- re-concatenating it on the main loop.
+  local CARRY_MAX = 1024 * 1024
+
   local carry = ''
+  local dropped = 0
+  local drop_warned = false
+  local function note_drop(n)
+    dropped = dropped + n
+    if not drop_warned and dropped > 0 then
+      drop_warned = true
+      vim.schedule(function()
+        vim.notify(('europa: dropped %d undecodable line(s) on the kernel'
+          .. ' bridge channel (further drops suppressed)'):format(dropped),
+          vim.log.levels.WARN)
+      end)
+    end
+  end
+
   local function on_stdout(_, data)
     if not data then
       return
@@ -30,6 +49,10 @@ function M.spawn(python, on_event, on_exit)
     -- data[#data] is the new (possibly partial) carry.
     data[1] = carry .. data[1]
     carry = data[#data]
+    if #carry > CARRY_MAX then
+      carry = ''
+      note_drop(1)
+    end
     data[#data] = nil
     local events = {}
     for _, line in ipairs(data) do
@@ -37,6 +60,8 @@ function M.spawn(python, on_event, on_exit)
         local ok, obj = pcall(vim.json.decode, line)
         if ok and type(obj) == 'table' then
           events[#events + 1] = obj
+        else
+          note_drop(1)
         end
       end
     end
@@ -49,12 +74,32 @@ function M.spawn(python, on_event, on_exit)
     end
   end
 
+  -- Keep the tail of the bridge's stderr: it carries the failure reason when
+  -- the process dies before it can emit a bridge_error (import error in the
+  -- script, zmq-level crash), and discarding it made such exits report only
+  -- "exited (code 1)".
+  local STDERR_KEEP = 15
+  local stderr_tail = {}
+  local function on_stderr(_, data)
+    if not data then
+      return
+    end
+    for _, line in ipairs(data) do
+      if line ~= '' then
+        if #stderr_tail >= STDERR_KEEP then
+          table.remove(stderr_tail, 1)
+        end
+        stderr_tail[#stderr_tail + 1] = line
+      end
+    end
+  end
+
   local jobid = vim.fn.jobstart({ python, script }, {
     on_stdout = on_stdout,
-    on_stderr = function() end, -- diagnostics only; ignored by default
+    on_stderr = on_stderr,
     on_exit = function(_, code)
       vim.schedule(function()
-        on_exit(code)
+        on_exit(code, stderr_tail)
       end)
     end,
   })
@@ -63,8 +108,12 @@ function M.spawn(python, on_event, on_exit)
   end
 
   local handle = { job = jobid }
+  -- Returns true when the payload was accepted by the channel. chansend on a
+  -- closing channel returns 0 (and can throw for a freed one); callers must
+  -- not count work as submitted in that case.
   function handle.send(obj)
-    vim.fn.chansend(jobid, vim.json.encode(obj) .. '\n')
+    local ok, sent = pcall(vim.fn.chansend, jobid, vim.json.encode(obj) .. '\n')
+    return ok and sent ~= 0
   end
   function handle.stop()
     pcall(vim.fn.jobstop, jobid)
