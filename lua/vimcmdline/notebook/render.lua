@@ -202,7 +202,12 @@ local function get_syntax_buf(ft)
   buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].swapfile = false
-  vim.bo[buf].filetype = ft
+  -- 'syntax', NOT 'filetype': setting filetype fires the user's FileType
+  -- autocmds on this hidden scratch buffer — commonly attaching an LSP client
+  -- or treesitter to it (treesitter can then disable the regex syntax the
+  -- synID scan below depends on). Setting 'syntax' loads syntax/<ft>.vim via
+  -- the Syntax autocmd only, which is exactly the part we need.
+  vim.bo[buf].syntax = ft
   syntax_bufs[ft] = buf
   return buf
 end
@@ -339,10 +344,38 @@ local BORDERS = {
   double  = { tl = '╔', tr = '╗', bl = '╚', br = '╝', h = '═', v = '║' },
 }
 
+-- Truncation cache: wide lines (DataFrame reprs) recur unchanged across a
+-- cell's redraws, and each binary search below costs ~log2(strchars) vim.fn
+-- crossings. Keyed by width \0 text; same drop-all cap as the other caches.
+local trunc_cache = {}
+local trunc_cache_n = 0
+local TRUNC_CACHE_MAX = 4096
+
+-- Flush the width-derived caches when the options strdisplaywidth depends on
+-- change; cached values silently bake in tabstop/ambiwidth at first query.
+local width_opts_sig = nil
+local function check_width_opts()
+  local sig = tostring(vim.o.ambiwidth) .. '\0' .. tostring(vim.o.tabstop)
+  if sig ~= width_opts_sig then
+    if width_opts_sig ~= nil then
+      width_cache = {}
+      width_cache_n = 0
+      trunc_cache = {}
+      trunc_cache_n = 0
+    end
+    width_opts_sig = sig
+  end
+end
+
 -- Truncate text to a maximum display width, adding an ellipsis if cut.
 local function trunc(text, width)
   if dw(text) <= width then
     return text
+  end
+  local key = width .. '\0' .. text
+  local hit = trunc_cache[key]
+  if hit then
+    return hit
   end
   local lo, hi = 0, vim.fn.strchars(text)
   while lo < hi do
@@ -353,7 +386,20 @@ local function trunc(text, width)
       hi = mid - 1
     end
   end
-  return vim.fn.strcharpart(text, 0, lo) .. '…'
+  local out = vim.fn.strcharpart(text, 0, lo) .. '…'
+  -- The search assumed a 1-cell ellipsis; with ambiwidth=double it renders as
+  -- 2 cells and the result can overshoot — back off until it fits.
+  while lo > 0 and vim.fn.strdisplaywidth(out) > width do
+    lo = lo - 1
+    out = vim.fn.strcharpart(text, 0, lo) .. '…'
+  end
+  if trunc_cache_n >= TRUNC_CACHE_MAX then
+    trunc_cache = {}
+    trunc_cache_n = 0
+  end
+  trunc_cache[key] = out
+  trunc_cache_n = trunc_cache_n + 1
+  return out
 end
 
 -- Turn the {text, hlgroup} lines into extmark virt_lines, optionally wrapped in
@@ -465,7 +511,9 @@ local function build_virt(lines, border, title, ft)
   local virt = { top }
   for _, l in ipairs(shown) do
     local text = l[1]
-    local pad = width - (l.w or dw(text))
+    -- Never negative: a grapheme-boundary or double-width-ellipsis surprise
+    -- must not turn the padding into a border-breaking string.rep(_, -1).
+    local pad = math.max(width - (l.w or dw(text)), 0)
     local chunks = { { b.v .. ' ', BORDER_HL } }
     for _, run in ipairs(content_runs(l, ft)) do
       chunks[#chunks + 1] = run
@@ -730,6 +778,7 @@ local function redraw(bufnr, cell_id)
     return
   end
   sync_cell_pos(bufnr, c)
+  check_width_opts()
   c.last_draw = vim.loop.hrtime() / 1e6
   local lines = display_lines(c)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
@@ -745,7 +794,16 @@ local function redraw(bufnr, cell_id)
     end
     title = { label, c.ok and HL.ok or HL.error }
   end
-  local virt = build_virt(lines, c.border, title, c.ft)
+  -- ft syntax colouring costs O(bytes) per uncached line. With an uncapped
+  -- display window (max_lines=0) one redraw can exceed the whole highlight
+  -- cache (drop-all eviction), re-scanning thousands of lines per redraw at
+  -- streaming rate. Past this budget, flat per-kind colors are used instead.
+  local FT_HL_MAX_LINES = 500
+  local ft = c.ft
+  if ft and #lines > FT_HL_MAX_LINES then
+    ft = nil
+  end
+  local virt = build_virt(lines, c.border, title, ft)
   if #virt == 0 then
     if c.mark_id then
       pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
@@ -840,6 +898,7 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     dropped = 0,
     nraw = 0,
     nbytes = 0,
+    fig_bytes = 0,
     notified = false,
   }
 end
@@ -890,6 +949,12 @@ function M.add(bufnr, cell_id, kind, text)
   schedule(bufnr, cell_id)
 end
 
+-- Retained PNG bytes per cell. A loop producing hundreds of figures keeps
+-- every PNG on its segment (for live resize/refresh); past this budget the
+-- OLDEST figures' bytes are released — their placements and placeholders
+-- stay intact, only resize/refresh/popup-enlarge degrade for those figures.
+local MAX_FIG_BYTES_PER_CELL = 64 * 1024 * 1024
+
 -- Append an inline figure (already transmitted to the terminal by image.lua):
 -- img = {id=..., rows={placeholder row texts}, cols=..., hl=...}.
 function M.add_image(bufnr, cell_id, img)
@@ -899,6 +964,18 @@ function M.add_image(bufnr, cell_id, img)
     return
   end
   c.segments[#c.segments + 1] = { kind = 'image', image = img }
+  c.fig_bytes = (c.fig_bytes or 0) + #(img.png or '')
+  if c.fig_bytes > MAX_FIG_BYTES_PER_CELL then
+    for _, seg in ipairs(seg_walk(c)) do
+      if c.fig_bytes <= MAX_FIG_BYTES_PER_CELL then
+        break
+      end
+      if seg.kind == 'image' and seg.image.png then
+        c.fig_bytes = c.fig_bytes - #seg.image.png
+        seg.image.png = nil
+      end
+    end
+  end
   schedule(bufnr, cell_id)
 end
 
@@ -996,7 +1073,11 @@ function M.clear_all(bufnr)
     for _, c in pairs(state[bufnr].cells) do
       free_cell_images(c)
     end
-    state[bufnr].cells = {}
+    -- Drop the per-buffer entry entirely: nvim never reuses buffer numbers
+    -- within a session, so a kept-but-empty table accretes for every notebook
+    -- buffer ever wiped (bstate() recreates it lazily if the buffer runs
+    -- cells again).
+    state[bufnr] = nil
   end
 end
 
