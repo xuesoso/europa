@@ -34,9 +34,21 @@ function M.check(cfg, opts)
   return true, nil
 end
 
+-- Probe plotty importability per interpreter, caching successes only (same
+-- rationale as the dep probe above: install-and-retry must re-probe). Used
+-- by the inline→plotty figure fallback at kernel start.
+local _plotty_cache = {}
+
 function M.has_plotty(cfg)
-  vim.fn.system({ cfg.python, '-c', 'import plotty' })
-  return vim.v.shell_error == 0
+  local py = cfg.python
+  if _plotty_cache[py] ~= true then
+    vim.fn.system({ py, '-c', 'import plotty' })
+    if vim.v.shell_error ~= 0 then
+      return false
+    end
+    _plotty_cache[py] = true
+  end
+  return true
 end
 
 return M

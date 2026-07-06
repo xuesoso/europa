@@ -52,6 +52,9 @@ echo "== inline figures: FigureRefresh re-transmits + defers repaint =="
 echo "== inline figures: larger placement in the output popup =="
 "$NVIM" --headless -u NONE -N -l test/popup_figure_test.lua || rc=1
 
+echo "== inline figures: terminal gate fallback (plotty pane / text) =="
+"$NVIM" --headless -u NONE -N -l test/figures_fallback.lua || rc=1
+
 echo "== retention: elision equivalence/invariants, flat streaming cost =="
 "$NVIM" --headless -u NONE -N -l test/retention_test.lua || rc=1
 

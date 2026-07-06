@@ -178,7 +178,18 @@ function M.start(bufnr)
   if cfg.figures == 'inline' then
     inline_ok, why = image.supported()
     if not inline_ok then
-      notify((why or 'inline figures unavailable') .. ' — falling back to text', vim.log.levels.WARN)
+      -- Downgrade chain: the plotty tmux pane still shows real figures on a
+      -- non-kitty terminal (it renders via sixel/kitty in its own pane), so
+      -- prefer it over the text note when it can actually work — inside
+      -- tmux, with plotty importable by the kernel's python. Mutating
+      -- cfg.figures here flips build_startup() below to plotty.enable().
+      local reason = why or 'inline figures unavailable'
+      if (vim.env.TMUX or '') ~= '' and health.has_plotty(cfg) then
+        cfg.figures = 'plotty'
+        notify(reason .. ' — falling back to the plotty pane', vim.log.levels.WARN)
+      else
+        notify(reason .. ' — falling back to text', vim.log.levels.WARN)
+      end
     end
   end
   handle.send({

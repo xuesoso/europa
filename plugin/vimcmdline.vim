@@ -99,6 +99,11 @@ let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cel
 " the image's aspect ratio. Both size options apply live: changing them (or
 " running :CmdLineNotebookFigureSize) re-renders figures already on screen.
 let g:cmdline_notebook_figure_rows = get(g:, 'cmdline_notebook_figure_rows', 0)
+" Terminal-name substrings treated as kitty-graphics capable by the inline
+" figure gate (matched against $TERM, or tmux's #{client_termname} inside
+" tmux). Extend for terminals that ship Unicode-placeholder support the
+" default list cannot know about.
+let g:cmdline_notebook_kitty_terms = get(g:, 'cmdline_notebook_kitty_terms', ['kitty', 'ghostty'])
 let g:cmdline_notebook_airline_section = get(g:, 'cmdline_notebook_airline_section', 'x')
 
 " Internal variables

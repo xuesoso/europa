@@ -257,12 +257,62 @@ function M.in_nested_tmux()
   return nested_cache
 end
 
--- Terminal sniff for kitty-graphics *virtual placement* support (kitty,
--- ghostty). Environment-based: KITTY_WINDOW_ID/GHOSTTY_* survive tmux, and
--- TERM=xterm-kitty|xterm-ghostty propagates over ssh. WezTerm is deliberately
--- absent — it implements parts of the kitty protocol but not the Unicode
--- placeholder/virtual placement path this module uses.
+-- Terminal-name patterns that indicate kitty-graphics *virtual placement*
+-- support. kitty and ghostty are the terminals known to implement the
+-- Unicode-placeholder path this module uses (WezTerm/Konsole implement only
+-- parts of the base protocol); the list is user-extensible for terminals
+-- the default cannot know about:
+--   let g:cmdline_notebook_kitty_terms = ['kitty', 'ghostty', 'myterm']
+-- Matched as plain substrings against the effective terminal name.
+local function term_matches(term)
+  local pats = vim.g.cmdline_notebook_kitty_terms
+  if type(pats) ~= 'table' or #pats == 0 then
+    pats = { 'kitty', 'ghostty' }
+  end
+  for _, p in ipairs(pats) do
+    if type(p) == 'string' and p ~= '' and term:find(p, 1, true) ~= nil then
+      return true
+    end
+  end
+  return false
+end
+
+-- TERM of the tmux client currently attached (nil while unqueried, false when
+-- the query failed). Cached per session like the nested-tmux probe — one
+-- process spawn, not one per figure — with the same caveat: a re-attach from
+-- a different terminal mid-session is not re-detected.
+local client_term_cache = nil
+
+function M._set_client_termname(v)
+  client_term_cache = v
+end
+
+local function tmux_client_term()
+  if client_term_cache ~= nil then
+    return client_term_cache
+  end
+  local out = vim.fn.system({ 'tmux', 'display-message', '-p', '#{client_termname}' })
+  client_term_cache = (vim.v.shell_error == 0 and out ~= '') and vim.trim(out) or false
+  return client_term_cache
+end
+
+-- Terminal sniff for kitty-graphics *virtual placement* support.
+--
+-- Inside tmux the ATTACHED CLIENT's terminal is what renders the graphics,
+-- and it is asked for directly (#{client_termname}): pane env vars are
+-- frozen from whenever the tmux server started, so they go stale in both
+-- directions across re-attaches (kitty attached to a foot-started server
+-- looked incapable; iTerm2 attached to a ghostty-started server looked
+-- capable). Outside tmux — or if the query fails — the environment decides:
+-- KITTY_WINDOW_ID / GHOSTTY_* identify a local terminal, and TERM (which
+-- ssh forwards by default) covers remote sessions.
 function M.kitty_capable()
+  if (vim.env.TMUX or '') ~= '' then
+    local cterm = tmux_client_term()
+    if cterm then
+      return term_matches(cterm)
+    end
+  end
   if (vim.env.KITTY_WINDOW_ID or '') ~= '' then
     return true
   end
@@ -270,9 +320,7 @@ function M.kitty_capable()
       or (vim.env.GHOSTTY_BIN_DIR or '') ~= '' then
     return true
   end
-  local term = vim.env.TERM or ''
-  return term:find('kitty', 1, true) ~= nil
-      or term:find('ghostty', 1, true) ~= nil
+  return term_matches(vim.env.TERM or '')
 end
 
 -- Capability gate for inline figures. Placeholders need the id in the RGB

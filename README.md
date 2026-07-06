@@ -200,6 +200,7 @@ let cmdline_notebook_figures     = 'inline'   " default ('plotty' = tmux pane, '
 let cmdline_notebook_figure_size = 50     " WIDTH in terminal columns
 let cmdline_notebook_figure_rows = 0      " HEIGHT in rows; 0 = keep the image's aspect ratio
 let cmdline_notebook_figure_dpi  = 200    " render resolution
+let cmdline_notebook_kitty_terms = ['kitty', 'ghostty']  " terminal names treated as kitty-capable
 ```
 
 **Plotly** works alongside matplotlib with no extra configuration: in inline
@@ -234,17 +235,21 @@ let cmdline_notebook_figures = 'plotty'   " sixel or kitty, in a tmux pane
 
 > **⚠ Terminal without the kitty graphics protocol?** Inline figures need a
 > terminal that implements kitty-graphics *virtual placements* (kitty,
-> ghostty). Since figures default to inline, europa sniffs the environment
-> (`KITTY_WINDOW_ID`, `GHOSTTY_*`, `TERM` matching `kitty`/`ghostty` — these
-> survive tmux and ssh) and on any other terminal (iTerm2, Terminal.app,
-> xterm, foot, Konsole, …) falls back to a `[figure not displayed: …]` note
-> instead of spraying escape data. If your terminal speaks the protocol but
-> the sniff cannot see it, opt in explicitly with
-> `let cmdline_notebook_figures = 'inline'` — an explicit setting overrides
-> the detection. Nested tmux carries images only over **sixel**, so it needs
-> the plotty pane too. Switch either case with
-> `let cmdline_notebook_figures = 'plotty'`; `:checkhealth europa` reports
-> what your setup supports.
+> ghostty). Since figures default to inline, europa detects the terminal:
+> inside tmux it asks tmux for the **attached client's** terminal
+> (`#{client_termname}`, so re-attaching from a different terminal is seen
+> correctly); otherwise it checks `KITTY_WINDOW_ID`/`GHOSTTY_*` and `TERM`
+> (which ssh forwards). On a terminal that fails the check (iTerm2,
+> Terminal.app, xterm, foot, Konsole, …) figures **fall back automatically**:
+> to the **[plotty] pane** when you are inside tmux and plotty is installed
+> for the kernel's python, else to a `[figure not displayed: …]` note —
+> never raw escape data. Two overrides:
+> `let cmdline_notebook_kitty_terms = ['kitty', 'ghostty', 'myterm']`
+> replaces the terminal-name allowlist (for terminals that ship
+> virtual-placement support the default cannot know about), and an explicit
+> `let cmdline_notebook_figures = 'inline'` skips the detection entirely.
+> Nested tmux carries images only over **sixel**, so it needs the plotty
+> pane too. `:checkhealth europa` reports what your setup supports.
 
 Figure size can be changed **live**: `:CmdLineNotebookFigureSize {width}
 [{height}]` (height in rows; omit it to keep the image's aspect ratio)

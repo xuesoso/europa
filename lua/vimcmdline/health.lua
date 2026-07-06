@@ -47,9 +47,10 @@ function M.check()
   local image = require('vimcmdline.notebook.image')
   local sup, why = image.supported()
   if sup then
-    ok('inline figure prerequisites met (kitty/ghostty terminal still required)')
+    ok('inline figure prerequisites met (terminal detected as kitty-graphics capable)')
   else
-    warn(why .. ' — figures fall back to a text note')
+    warn(why .. ' — figures fall back to the plotty pane (in tmux, with plotty'
+      .. ' installed) or a text note')
   end
   if vim.env.TMUX and vim.env.TMUX ~= '' and not image.in_nested_tmux() then
     local pt = vim.fn.system({ 'tmux', 'show', '-g', 'allow-passthrough' })

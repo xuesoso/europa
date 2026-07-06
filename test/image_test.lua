@@ -194,20 +194,26 @@ end
 
 -- ---- terminal capability gate ------------------------------------------
 -- Figures default to 'inline', so supported() must refuse terminals that do
--- not speak kitty graphics (env sniff) unless the user opted in explicitly.
+-- not speak kitty graphics unless the user opted in explicitly. Inside tmux
+-- the attached client's terminal (tmux #{client_termname}) is authoritative;
+-- otherwise the environment decides.
 do
   local saved = {
     kitty = vim.env.KITTY_WINDOW_ID,
     gres = vim.env.GHOSTTY_RESOURCES_DIR,
     gbin = vim.env.GHOSTTY_BIN_DIR,
     term = vim.env.TERM,
+    tmux = vim.env.TMUX,
     fig = vim.g.cmdline_notebook_figures,
+    pats = vim.g.cmdline_notebook_kitty_terms,
   }
   vim.env.KITTY_WINDOW_ID = ''
   vim.env.GHOSTTY_RESOURCES_DIR = ''
   vim.env.GHOSTTY_BIN_DIR = ''
   vim.env.TERM = 'xterm-256color'
+  vim.env.TMUX = ''  -- isolate from the ambient tmux session, if any
   vim.g.cmdline_notebook_figures = nil
+  vim.g.cmdline_notebook_kitty_terms = nil
 
   local ok, why = img.supported()
   check('gate_refuses_unknown_terminal', ok, false)
@@ -228,12 +234,39 @@ do
 
   vim.env.GHOSTTY_RESOURCES_DIR = '/tmp/ghostty-res'
   check('gate_ghostty_accepts', (img.supported()), true)
+  vim.env.GHOSTTY_RESOURCES_DIR = ''
 
+  -- User-extensible pattern list: a terminal the default list cannot know.
+  vim.g.cmdline_notebook_kitty_terms = { 'myfancyterm' }
+  vim.env.TERM = 'xterm-myfancyterm'
+  check('gate_custom_pattern_accepts', (img.supported()), true)
+  vim.env.TERM = 'xterm-kitty'
+  check('gate_custom_pattern_replaces_default', (img.supported()), false)
+  vim.g.cmdline_notebook_kitty_terms = nil
+  vim.env.TERM = 'xterm-256color'
+
+  -- Inside tmux, #{client_termname} is authoritative over pane env vars,
+  -- which are frozen at tmux-server start and go stale across re-attaches.
+  vim.env.TMUX = '/tmp/tmux-test/default,1234,0'
+  img._set_client_termname('xterm-kitty')
+  check('gate_tmux_client_kitty_accepts', (img.supported()), true)
+
+  vim.env.KITTY_WINDOW_ID = '3'  -- stale server env, non-kitty client
+  img._set_client_termname('xterm-256color')
+  check('gate_tmux_client_overrides_stale_env', (img.supported()), false)
+
+  img._set_client_termname(false)  -- query failed: env sniff decides
+  check('gate_tmux_query_failure_falls_back_to_env', (img.supported()), true)
+  vim.env.KITTY_WINDOW_ID = ''
+
+  img._set_client_termname(nil)
   vim.env.KITTY_WINDOW_ID = saved.kitty
   vim.env.GHOSTTY_RESOURCES_DIR = saved.gres
   vim.env.GHOSTTY_BIN_DIR = saved.gbin
   vim.env.TERM = saved.term
+  vim.env.TMUX = saved.tmux
   vim.g.cmdline_notebook_figures = saved.fig
+  vim.g.cmdline_notebook_kitty_terms = saved.pats
 end
 
 if fail > 0 then
