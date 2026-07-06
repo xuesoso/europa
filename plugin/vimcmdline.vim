@@ -515,6 +515,15 @@ function! LastCodeBlock()
     return search(s:BlockSepPattern(), 'bcWn')
 endfunction
 
+" First line of the cell containing the cursor: one line below the nearest
+" separator at or above the cursor, or the top of the buffer when there is no
+" separator above. Clamped so a separator on the last buffer line does not
+" yield a line past the end.
+function! s:CurrentBlockTop()
+    let l:lastblock = LastCodeBlock()
+    return l:lastblock == 0 ? 1 : min([l:lastblock + 1, line("$")])
+endfunction
+
 " Single-step cursor moves, with no notion of a count. Used both by the
 " count-aware ToNextCodeBlock()/ToLastCodeBlock() below and internally by
 " ExecuteCurrentCodeBlockJumpNext(), which must NOT let its internal jump
@@ -522,29 +531,59 @@ endfunction
 " the whole duration of the command (it is not reset per nested function
 " call), so calling the count-aware wrapper from inside a count-aware caller
 " would compound the count instead of taking one step per loop iteration.
+"
+" Both steps always land on the top of a cell: one line below the cell's
+" separator, or the top of the buffer for a leading block with no separator
+" above it.
 function! s:StepNextCodeBlock()
     let l:nextblock = NextCodeBlock()
     if l:nextblock == 0
-        exe line("$")
+        " No cell below: settle on the top of the current (last) cell.
+        exe s:CurrentBlockTop()
     else
-        exe l:nextblock + 1
+        exe min([l:nextblock + 1, line("$")])
     endif
 endfunction
 
 function! s:StepLastCodeBlock()
-    let l:lastblock = LastCodeBlock()
-    if l:lastblock <= 2
+    let l:cursep = LastCodeBlock()
+    " The landing must be strictly above both the cursor and the top of the
+    " current cell (cursep + 1). Bounding by the cursor line matters when the
+    " cursor sits ON a separator: adjacent separators would otherwise make
+    " the separator line its own landing target, wedging the motion there
+    " instead of walking on up.
+    let l:bound = min([line('.'), l:cursep + 1])
+    if l:cursep == 0 || l:bound <= 2
+        " First cell (unmarked, or marked on line 1): the top of the buffer
+        " is as far up as a cell top goes.
         exe 1
-    else
-        exe l:lastblock - 2
+        return
     endif
+    " Nearest separator at or above bound-2 opens the previous cell one line
+    " below it; no separator there means the previous cell is the leading
+    " unmarked block. LastCodeBlock() searches from the cursor, so hop there
+    " (end of line, so an indented separator on that line still matches) and
+    " restore afterwards.
+    let l:save = getpos('.')
+    call cursor(l:bound - 2, col([l:bound - 2, '$']))
+    let l:prevsep = LastCodeBlock()
+    call setpos('.', l:save)
+    exe l:prevsep == 0 ? 1 : l:prevsep + 1
 endfunction
 
-" A count moves N cells forward/back instead of just one.
+" A count moves N cells forward/back instead of just one. A step that leaves
+" the cursor on the same line has reached a fixed point (the first or last
+" cell): every further step would rescan the buffer only to stay put — in a
+" separator-less buffer each of those is a full-buffer search() — so stop as
+" soon as a step stops moving.
 function! ToNextCodeBlock()
     let l:n = v:count1
     while l:n > 0
+        let l:before = line('.')
         call s:StepNextCodeBlock()
+        if line('.') == l:before
+            break
+        endif
         let l:n -= 1
     endwhile
 endfunction
@@ -552,7 +591,11 @@ endfunction
 function! ToLastCodeBlock()
     let l:n = v:count1
     while l:n > 0
+        let l:before = line('.')
         call s:StepLastCodeBlock()
+        if line('.') == l:before
+            break
+        endif
         let l:n -= 1
     endwhile
 endfunction

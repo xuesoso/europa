@@ -405,13 +405,17 @@ so you don't have to hardcode `:call Func()<CR>` to bind your own keys:
 | `:CmdLineExecAllCells` | `<Plug>(cmdline-exec-all-cells)` | Execute all cells, top to bottom |
 | `:CmdLineExecAllCellsBelow` | `<Plug>(cmdline-exec-all-cells-below)` | Execute the current cell and every cell below it |
 | `:CmdLineExecToEnd` | `<Plug>(cmdline-exec-to-end)` | Execute from the cursor to the end of the cell |
-| `:CmdLineNextCell` | `<Plug>(cmdline-next-cell)` | Jump to the next cell |
-| `:CmdLinePrevCell` | `<Plug>(cmdline-prev-cell)` | Jump to the previous cell |
+| `:CmdLineNextCell` | `<Plug>(cmdline-next-cell)` | Jump to the top of the next cell |
+| `:CmdLinePrevCell` | `<Plug>(cmdline-prev-cell)` | Jump to the top of the previous cell |
 
 `ExecAllCells` runs every cell top to bottom; `ExecAllCellsBelow` runs the cell
 under the cursor and every cell below it. Both skip whitespace-only cells and
 restore the cursor when done. Neither has a default key mapping — bind the
 `<Plug>` mappings above if you want one.
+
+`NextCell`/`PrevCell` always land on the top of a cell: the line just below
+the cell's `# %%` marker, or the top of the buffer for a leading block with
+no marker above it. `NextCell` in the last cell settles on that cell's top.
 
 A count prefix (e.g. `3<Plug>(cmdline-next-cell)`) moves/executes N cells for
 `ExecCellJumpNext`/`NextCell`/`PrevCell`; `ExecCell`/`ExecToEnd`/`ExecAllCells`/
