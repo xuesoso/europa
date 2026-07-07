@@ -14,6 +14,7 @@ vim.cmd('source plugin/vimcmdline.vim')
 local img = require('vimcmdline.notebook.image')
 local render = require('vimcmdline.notebook.render')
 local nb = require('vimcmdline.notebook')
+local config = require('vimcmdline.notebook.config')
 
 local fail = 0
 local function check(label, got, want)
@@ -25,8 +26,14 @@ local function check(label, got, want)
   end
 end
 
--- Inline is the default figure mode when nothing figure-related is set.
-check('default_figures_inline', vim.g.cmdline_notebook_figures, 'inline')
+-- Inline is the RESOLVED default figure mode when nothing figure-related is
+-- set (the plugin no longer materializes it into a global; config.lua supplies
+-- the default). Check the resolved value BEFORE opting in below.
+check('default_figures_inline', config.read().figures, 'inline')
+
+-- Explicit opt-in forces inline past terminal detection so the figure
+-- transmits on the headless CI runner (a non-kitty terminal).
+vim.g.cmdline_notebook_figures = 'inline'
 
 local writes = {}
 img._set_tty_writer(function(bytes)

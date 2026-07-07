@@ -67,26 +67,18 @@ let g:cmdline_block_sep = get(g:, 'cmdline_block_sep', '# %%')
 " renders output inline. Set to 0 for classic REPL-only behavior. A live REPL
 " still wins per buffer, so `,s` then the send keys stay pure REPL.
 let g:cmdline_notebook_enable = get(g:, 'cmdline_notebook_enable', 1)
-" Figure routing: 'inline' (default; kitty graphics drawn in the cell output —
-" needs kitty/ghostty + termguicolors), 'plotty' (tmux pane), or 'none'. When
-" unset, an EXPLICIT legacy g:cmdline_notebook_plotty still wins for
-" back-compat (1 => 'plotty', 0 => 'none').
+" Figure routing: 'inline' (default; kitty graphics in the cell output —
+" needs kitty/ghostty + termguicolors), 'plotty' (tmux pane), or 'none'.
 "
-" Record whether the user EXPLICITLY chose a route BEFORE materializing the
-" default below. The inline-figure gate treats an explicit 'inline' as a
-" deliberate override of terminal detection; without this flag it could not
-" tell that apart from the materialized default (both make the global
-" 'inline'), so the override fired for everyone and the gate never refused an
-" incapable terminal.
-let g:cmdline_notebook_figures_explicit = exists('g:cmdline_notebook_figures') ? 1 : 0
-if !exists('g:cmdline_notebook_figures')
-    if exists('g:cmdline_notebook_plotty')
-        let g:cmdline_notebook_figures = g:cmdline_notebook_plotty ? 'plotty' : 'none'
-    else
-        let g:cmdline_notebook_figures = 'inline'
-    endif
-endif
-let g:cmdline_notebook_plotty = get(g:, 'cmdline_notebook_plotty', 1)
+" Deliberately NOT materialized into a global here: lua/vimcmdline/notebook/
+" config.lua resolves the effective route and honors the legacy
+" g:cmdline_notebook_plotty (1 => 'plotty', 0 => 'none') when the user set it
+" but not figures. Leaving g:cmdline_notebook_figures unset unless the user
+" actually chose a route is what lets the inline-figure gate read it as
+" intent: an explicit 'inline' overrides terminal detection, while the default
+" 'inline' falls through to detection (and to the plotty/text fallback on an
+" incapable terminal). g:cmdline_notebook_plotty is likewise left unset so
+" config.lua can tell a real user choice from the default.
 let g:cmdline_notebook_startup_code = get(g:, 'cmdline_notebook_startup_code', [])
 let g:cmdline_notebook_python = get(g:, 'cmdline_notebook_python', '')
 let g:cmdline_notebook_kernel_name = get(g:, 'cmdline_notebook_kernel_name', 'python3')

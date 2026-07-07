@@ -17,7 +17,6 @@ end
 function M.read()
   local cfg = {}
   cfg.enable = gget('cmdline_notebook_enable', 1)
-  cfg.plotty = truthy(gget('cmdline_notebook_plotty', 1))
   cfg.startup_code = gget('cmdline_notebook_startup_code', {})
   cfg.python = gget('cmdline_notebook_python', '')
   cfg.kernel_name = gget('cmdline_notebook_kernel_name', 'python3')
@@ -28,9 +27,22 @@ function M.read()
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
   cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))
   -- Figure routing: 'inline' (kitty graphics in the cell output — the
-  -- default), 'plotty' (tmux pane), or 'none'. plugin/vimcmdline.vim resolves
-  -- the legacy cmdline_notebook_plotty flag into this option at load time.
-  local figures = gget('cmdline_notebook_figures', 'inline')
+  -- default), 'plotty' (tmux pane), or 'none'. Resolved HERE rather than
+  -- materialized into a global by the plugin, so the inline gate can read
+  -- g:cmdline_notebook_figures directly as user intent: it is nil unless the
+  -- user chose a route, which is how an explicit 'inline' (a deliberate
+  -- override of terminal detection) stays distinct from the default. The
+  -- legacy g:cmdline_notebook_plotty wins when the user set it but not figures
+  -- (1 => 'plotty', 0 => 'none').
+  local figures = vim.g.cmdline_notebook_figures
+  if figures == nil then
+    local plotty = vim.g.cmdline_notebook_plotty
+    if plotty ~= nil then
+      figures = truthy(plotty) and 'plotty' or 'none'
+    else
+      figures = 'inline'
+    end
+  end
   if figures ~= 'plotty' and figures ~= 'inline' and figures ~= 'none' then
     figures = 'inline'
   end

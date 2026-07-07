@@ -49,12 +49,11 @@ vim.env.KITTY_WINDOW_ID = ''
 vim.env.GHOSTTY_RESOURCES_DIR = ''
 vim.env.GHOSTTY_BIN_DIR = ''
 vim.env.TERM = 'xterm-256color'
--- Production default: the plugin materializes 'inline' with _explicit=0, which
--- must still fall back on a non-kitty terminal (the bug that motivated the
--- _explicit flag was the gate treating this materialized default as a forced
--- override and never refusing).
-vim.g.cmdline_notebook_figures = 'inline'
-vim.g.cmdline_notebook_figures_explicit = 0
+-- Default install: the user chose no route, so the global is UNSET. config.read
+-- resolves 'inline' as the default, and on this non-kitty terminal the gate
+-- must refuse and fall back — the bug this guards was the gate treating a
+-- default install as a forced inline and never refusing.
+vim.g.cmdline_notebook_figures = nil
 
 local function start_session()
   sent = {}

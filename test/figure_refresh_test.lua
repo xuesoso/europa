@@ -15,6 +15,9 @@ vim.o.termguicolors = true
 vim.o.columns = 200
 vim.o.lines = 60
 vim.g.cmdline_notebook_enable = 1
+-- Explicit opt-in forces inline past terminal detection so figures transmit
+-- on the headless CI runner (a non-kitty terminal).
+vim.g.cmdline_notebook_figures = 'inline'
 vim.cmd('source plugin/vimcmdline.vim')
 
 local img = require('vimcmdline.notebook.image')

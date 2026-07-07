@@ -12,7 +12,8 @@
 --   BENCH_PYTHON=... nvim --headless -u NONE -N -l test/leak_check.lua
 vim.opt.rtp:prepend('.')
 vim.o.termguicolors = true
-vim.g.cmdline_notebook_figures = 'inline'  -- explicit opt-in: keep the kitty gate deterministic off-terminal
+-- Explicit opt-in forces inline past terminal detection (see image_test.lua).
+vim.g.cmdline_notebook_figures = 'inline'
 vim.o.columns = 120
 vim.o.lines = 60
 vim.g.cmdline_notebook_enable = 1

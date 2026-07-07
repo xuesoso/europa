@@ -21,7 +21,7 @@ vim.fn.mkdir(tmpdir, 'p')
 
 vim.g.cmdline_notebook_enable = 1
 vim.g.cmdline_notebook_python = PY
-vim.g.cmdline_notebook_figures = 'inline'
+vim.g.cmdline_notebook_figures = 'inline'  -- explicit opt-in forces inline past detection
 vim.g.cmdline_notebook_figure_size = 12
 vim.g.cmdline_tmp_dir = tmpdir
 vim.cmd('source plugin/vimcmdline.vim')

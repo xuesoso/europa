@@ -323,16 +323,14 @@ function M.kitty_capable()
   return term_matches(vim.env.TERM or '')
 end
 
--- True only when the user EXPLICITLY set cmdline_notebook_figures='inline' —
--- a deliberate override of terminal detection. This must NOT match the
--- materialized default: plugin/vimcmdline.vim sets the global to 'inline' for
--- everyone who did not choose a route, so testing the VALUE alone would treat
--- every default install as a forced override and the gate below would never
--- refuse an incapable terminal. cmdline_notebook_figures_explicit records
--- whether the global existed before that default was applied.
+-- True only when the user EXPLICITLY chose inline — a deliberate override of
+-- terminal detection. The plugin does not materialize a default into
+-- g:cmdline_notebook_figures (config.lua supplies the default instead), so the
+-- global is set ONLY when the user chose a route: an 'inline' value here means
+-- the user asked for it, distinct from a default install (nil) which must fall
+-- through to detection and the plotty/text fallback on an incapable terminal.
 local function inline_forced()
   return vim.g.cmdline_notebook_figures == 'inline'
-      and vim.g.cmdline_notebook_figures_explicit == 1
 end
 
 -- Capability gate for inline figures. Placeholders need the id in the RGB
