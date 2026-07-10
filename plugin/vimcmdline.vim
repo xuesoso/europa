@@ -1091,34 +1091,72 @@ if has('nvim') && g:cmdline_notebook_enable
         return '⋯ ' . l:n
     endfunction
 
+    " 'foldexpr' for the collapsed view. The line→fold map is recomputed at
+    " most once per buffer change (b:changedtick), so folds TRACK edits and
+    " freshly added cells fold themselves while the view is active. Range
+    " starts return '>1' so two contiguous cells stay separate folds instead
+    " of merging into one.
+    function! VimCmdLineNotebookFoldExpr(lnum) abort
+        if get(b:, 'cmdline_fold_tick', -1) != b:changedtick
+            let b:cmdline_fold_tick = b:changedtick
+            let b:cmdline_fold_map = {}
+            for [l:s, l:e] in s:NotebookCodeFoldRanges()
+                let b:cmdline_fold_map[l:s] = '>1'
+                for l:i in range(l:s + 1, l:e)
+                    let b:cmdline_fold_map[l:i] = '1'
+                endfor
+            endfor
+        endif
+        return get(b:cmdline_fold_map, a:lnum, '0')
+    endfunction
+
     " Toggle: collapse all raw input code to one fold line per cell, keeping
     " markdown cells and the rendered inline outputs visible; run again to
     " restore the buffer (and the window's own fold settings). Re-run after
     " adding cells to fold the new ones too.
     function! VimCmdLineNotebookCollapse() abort
+        " The view uses 'foldexpr' folds rather than :fold manual ones,
+        " deliberately: :mkview (with "folds" in 'viewoptions') snapshots the
+        " window's fold state, and a :loadview in a LATER session can restore
+        " a collapsed window after the buffer-local toggle state is gone.
+        " With manual folds that restore is a trap — fdm=manual sticks and a
+        " re-collapse would save it as the "user setting". mkview DOES
+        " persist 'foldexpr', so our expression doubles as a durable
+        " collapse signature: such a window is recognized as collapsed here,
+        " and the folds themselves keep working (the expr recomputes its map
+        " on first evaluation).
         if get(b:, 'cmdline_code_collapsed', 0)
-            normal! zE
+                    \ || &l:foldexpr =~# 'VimCmdLineNotebookFoldExpr'
             let l:save = get(b:, 'cmdline_code_fold_save', {})
-            if has_key(l:save, 'fdm') | let &l:foldmethod = l:save.fdm | endif
-            if has_key(l:save, 'fdt') | let &l:foldtext = l:save.fdt | endif
-            if has_key(l:save, 'fen') | let &l:foldenable = l:save.fen | endif
-            if has_key(l:save, 'fml') | let &l:foldminlines = l:save.fml | endif
+            if !empty(l:save)
+                if has_key(l:save, 'fdm') | let &l:foldmethod = l:save.fdm | endif
+                if has_key(l:save, 'fde') | let &l:foldexpr = l:save.fde | endif
+                if has_key(l:save, 'fdt') | let &l:foldtext = l:save.fdt | endif
+                if has_key(l:save, 'fen') | let &l:foldenable = l:save.fen | endif
+                if has_key(l:save, 'fml') | let &l:foldminlines = l:save.fml | endif
+                if has_key(l:save, 'fdl') | let &l:foldlevel = l:save.fdl | endif
+            else
+                " View-restored collapse from another session: the saved
+                " settings are gone, so fall back to the GLOBAL values of the
+                " fold options (what the user's vimrc set).
+                setlocal foldmethod< foldexpr< foldtext< foldenable<
+                            \ foldminlines< foldlevel<
+            endif
             let b:cmdline_code_collapsed = 0
             return
         endif
         let b:cmdline_code_fold_save =
-                    \ {'fdm': &l:foldmethod, 'fdt': &l:foldtext,
-                    \  'fen': &l:foldenable, 'fml': &l:foldminlines}
-        setlocal foldmethod=manual
-        normal! zE
-        setlocal foldenable
-        " Single-line cells produce single-line folds, which the default
-        " 'foldminlines' (1) would display OPEN.
-        setlocal foldminlines=0
+                    \ {'fdm': &l:foldmethod, 'fde': &l:foldexpr,
+                    \  'fdt': &l:foldtext,  'fen': &l:foldenable,
+                    \  'fml': &l:foldminlines, 'fdl': &l:foldlevel}
+        let b:cmdline_fold_tick = -1
+        " foldminlines=0: single-line cells produce single-line folds, which
+        " the default (1) would display open. foldlevel=0: expr folds start
+        " closed.
+        setlocal foldenable foldminlines=0 foldlevel=0
         let &l:foldtext = 'VimCmdLineNotebookFoldText()'
-        for l:r in s:NotebookCodeFoldRanges()
-            exe printf('%d,%dfold', l:r[0], l:r[1])
-        endfor
+        let &l:foldexpr = 'VimCmdLineNotebookFoldExpr(v:lnum)'
+        setlocal foldmethod=expr
         let b:cmdline_code_collapsed = 1
     endfunction
 

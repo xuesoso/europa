@@ -79,7 +79,12 @@ check('sanity_output_rendered', expanded_h > vim.api.nvim_buf_line_count(buf), t
 -- ---- collapse -----------------------------------------------------------
 vim.cmd('CmdLineNotebookCollapse')
 
-check('collapse_sets_manual_folds', vim.wo.foldmethod, 'manual')
+-- expr folds, not manual: mkview persists 'foldexpr', making the collapsed
+-- state recognizable (and expandable) even in a later session that restored
+-- it via loadview with no buffer-local toggle state left.
+check('collapse_sets_expr_folds', vim.wo.foldmethod, 'expr')
+check('collapse_foldexpr_signature',
+  vim.wo.foldexpr:find('VimCmdLineNotebookFoldExpr', 1, true) ~= nil, true)
 -- Leading block has no output: folds ENTIRELY (header foldtext only).
 check('leading_block_folds_fully',
   vim.fn.foldclosed(1) > 0 and vim.fn.foldclosed(3) > 0, true)
@@ -111,12 +116,35 @@ check('expand_removes_folds', vim.fn.foldclosed(5), -1)
 check('expand_restores_foldmethod', vim.wo.foldmethod, 'indent')
 check('expand_restores_foldtext', vim.wo.foldtext, user_foldtext)
 
--- ---- re-collapse after adding an unrun cell (refresh path) ----------------
+-- ---- new cell added WHILE collapsed folds itself --------------------------
+-- The foldexpr recomputes its map per buffer change, so the view tracks
+-- edits live — no re-toggle needed.
+vim.cmd('CmdLineNotebookCollapse')
 vim.api.nvim_buf_set_lines(buf, 17, 17, false, { '# %% new cell', 'x = 9', 'x' })
-vim.cmd('CmdLineNotebookCollapse')
-check('recollapse_folds_new_cell_fully',
+check('new_cell_folds_live',
   vim.fn.foldclosed(19) > 0 and vim.fn.foldclosed(20) > 0, true)
+-- Contiguous fold ranges stay SEPARATE folds (the '>1' range starts): the
+-- trailing-blanks chunk [16,17] touches the new cell's range [18,20].
+check('adjacent_cells_not_merged', vim.fn.foldclosed(18), 18)
 vim.cmd('CmdLineNotebookCollapse')
+
+-- ---- view-restored collapse from a dead session self-heals ----------------
+-- mkview/loadview (viewoptions containing "folds") can restore fdm=expr and
+-- our foldexpr into a session with no buffer-local toggle state. ,z must
+-- recognize the signature and restore the GLOBAL fold options instead of
+-- re-collapsing and saving fdm=expr as the "user setting".
+-- NB: set the restored state with :setlocal exactly like a real view file —
+-- vim.wo assignment would clobber the GLOBAL option value too, corrupting
+-- the very setting the heal is supposed to fall back to.
+vim.go.foldmethod = 'indent'         -- the user's vimrc-level setting
+vim.cmd('setlocal foldmethod=expr')  -- what loadview restores
+vim.cmd([[setlocal foldexpr=VimCmdLineNotebookFoldExpr(v:lnum)]])
+vim.b[buf].cmdline_code_collapsed = nil
+vim.b[buf].cmdline_code_fold_save = nil
+check('viewrestore_folds_still_work', vim.fn.foldclosed(5) > 0, true)
+vim.cmd('CmdLineNotebookCollapse')
+check('viewrestore_heals_foldmethod', vim.wo.foldmethod, 'indent')
+check('viewrestore_expanded', vim.fn.foldclosed(5), -1)
 
 if fail > 0 then
   vim.cmd('cquit!')

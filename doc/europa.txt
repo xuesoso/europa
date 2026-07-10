@@ -307,12 +307,19 @@ Commands: >
 			unfolded wherever they actually are (an output is
 			anchored to the line its cell ended on when it RAN,
 			which drifts with edits — a closed fold would hide
-			it); cells with no output fold entirely. Folds track
-			edits; run the command twice to refresh after adding
-			cells. The window's own fold settings ('foldmethod',
-			'foldtext', 'foldenable', 'foldminlines') are saved
-			on collapse and restored when toggled off; any manual
-			folds the window had are cleared.
+			it); cells with no output fold entirely. The view is
+			LIVE ('foldexpr'-based): edits track, and newly added
+			cells fold themselves. While it is active the
+			window's usual fold method is displaced (one
+			'foldmethod' per window); toggling off restores the
+			saved fold settings ('foldmethod', 'foldexpr',
+			'foldtext', 'foldenable', 'foldminlines',
+			'foldlevel') — manual folds the window had are
+			cleared. A collapsed view captured by :mkview and
+			restored by :loadview in a LATER session is
+			recognized by its 'foldexpr' signature: it keeps
+			working, and toggling off falls back to the GLOBAL
+			fold options from your vimrc.
 Options:
 							*cmdline_notebook_enable*
 cmdline_notebook_enable   Master switch for notebook mode (Neovim). Default 1
