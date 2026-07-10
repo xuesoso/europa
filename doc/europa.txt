@@ -23,7 +23,9 @@ CONTENTS					*europa*	*vimcmdline*
 europa runs your code like a Jupyter notebook inside Neovim: split a file into
 "# %%" cells, run them through a headless Jupyter kernel, and see each cell's
 text output rendered inline under the cell (see |vimcmdline-notebook|). Plots
-are drawn in the terminal by the plotty package; europa itself draws no images.
+are drawn INLINE in the cell output by europa itself via the kitty graphics
+protocol (on a capable terminal — kitty, ghostty), or in the plotty package's
+tmux pane on other terminals (see |cmdline_notebook_figures|).
 
 europa is also a plain send-to-interpreter plugin, built on vimcmdline: it
 sends lines, paragraphs, blocks, and files from either Vim or Neovim to a REPL
@@ -180,8 +182,12 @@ cmdline_term_height	Initial height of the interpreter window or pane.
 
 							*cmdline_tmp_dir*
 cmdline_tmp_dir		Temporary directory used to save files that are
-			sourced by the interpreter. Default: a per-user,
-			per-session directory under /tmp.
+			sourced by the interpreter (and notebook figure PNGs).
+			Default: a unique per-session directory derived from
+			|tempname()|, created with mode 0700 and removed
+			recursively on exit. A user-set directory is left in
+			place; only its lines.* interchange files are cleaned
+			up at exit.
 
 							*cmdline_outhl*
 cmdline_outhl		Syntax highlight the interpreter output (Neovim).
@@ -234,19 +240,29 @@ Requirements:
   - Neovim 0.10+.
   - Python with jupyter_client and ipykernel:
       pip install jupyter_client ipykernel
-  - For inline figures (the default): a terminal that speaks the kitty
-    graphics protocol (kitty, ghostty, WezTerm), 'termguicolors', and inside
-    tmux (>= 3.3) `set -g allow-passthrough on`.
-  - For the plotty pane instead: pip install plotty, and run inside tmux
-    (>= 3.4) in a sixel/kitty-capable terminal.
+  - For inline figures (the default): a terminal that implements
+    kitty-graphics VIRTUAL PLACEMENTS — kitty or ghostty — plus
+    'termguicolors', and inside tmux (>= 3.3) `set -g allow-passthrough on`.
+  - For the plotty pane: pip install plotty, and run inside tmux (>= 3.4) in
+    a sixel/kitty-capable terminal.
 
-NOTE: any terminal that speaks the kitty graphics protocol (kitty, ghostty,
-WezTerm, ...) can display inline figures; terminals without it (e.g. xterm,
-foot, Konsole) show a "[figure not displayed: ...]" note instead. Nested tmux
-carries images only over sixel, so it needs the plotty pane too. Set >
-	let cmdline_notebook_figures = 'plotty'
-<to route figures to plotty's tmux pane, which works on sixel terminals (this
-was the default before 'inline' became the default).
+NOTE: inline display uses a specific SUBSET of the kitty graphics protocol
+(virtual placements with Unicode placeholders — what lets figures live in
+virtual lines and survive scrolling/tmux), which far fewer terminals implement
+than the base protocol. kitty and ghostty support it; WezTerm, Konsole, iTerm2
+and other partial implementations do NOT. europa detects the terminal at
+kernel start — inside tmux it asks tmux for the ATTACHED CLIENT's terminal
+(#{client_termname}); otherwise it checks $KITTY_WINDOW_ID / $GHOSTTY_* and
+$TERM (which ssh forwards) — and on an incapable terminal figures FALL BACK
+automatically: to the plotty pane when inside tmux with plotty importable by
+the kernel's python, else to a "[figure not displayed: ...]" text note, never
+raw escape data. Nested tmux carries images only over sixel, so it needs the
+plotty pane too. Overrides: |cmdline_notebook_kitty_terms| teaches the
+detection about terminals it cannot know (it REPLACES the name list), and an
+explicit >
+	let cmdline_notebook_figures = 'inline'
+<skips the detection entirely; set it to 'plotty' to always use the pane
+(this was the default before 'inline' became the default).
 
 It is on by default; run a cell and the kernel starts automatically. To turn
 it off (classic REPL only), set in your |vimrc|: >
@@ -293,8 +309,11 @@ cmdline_notebook_python   Python executable that runs the kernel bridge (must
 cmdline_notebook_kernel_name  Jupyter kernelspec name. Default: 'python3'.
 
 							*cmdline_notebook_plotty*
-cmdline_notebook_plotty   When 1 (default), run "import plotty; plotty.enable()"
-			at kernel start (ignored if plotty is not installed).
+cmdline_notebook_plotty   LEGACY (pre-|cmdline_notebook_figures|). Only read
+			when |cmdline_notebook_figures| is unset: 1 routes
+			figures to the plotty pane, 0 turns figure display
+			off. Unset by default. Prefer setting
+			|cmdline_notebook_figures| directly.
 
 							*cmdline_notebook_startup_code*
 cmdline_notebook_startup_code  List of extra Python lines run once at kernel
@@ -351,17 +370,34 @@ cmdline_notebook_output_win  Window used by :CmdLineNotebookOpenOutput: 'float'
 			'split'. Default: 'float'.
 
 							*cmdline_notebook_figures*
-cmdline_notebook_figures  Where matplotlib figures render: 'inline' (default;
-			kitty graphics drawn inside the cell's output box —
-			needs a kitty-protocol terminal such as kitty/ghostty,
-			'termguicolors', and tmux `allow-passthrough on` when
-			inside tmux), 'plotty' (plotty's tmux pane), or
-			'none'. When this option is unset, an EXPLICIT legacy
-			g:cmdline_notebook_plotty still wins (1 => 'plotty',
-			0 => 'none'). Nested tmux is not supported: europa
-			detects it, warns at kernel start, and falls back to a
-			text note (use 'plotty' there). When inline display is
-			unavailable the cell shows a text note instead.
+cmdline_notebook_figures  Where matplotlib figures render: 'inline' (kitty
+			graphics drawn inside the cell's output box — needs a
+			terminal with kitty-graphics virtual placement support
+			such as kitty/ghostty, 'termguicolors', and tmux
+			`allow-passthrough on` when inside tmux), 'plotty'
+			(plotty's tmux pane), or 'none'. UNSET by default;
+			'inline' is then the resolved default, subject to
+			terminal detection with automatic fallback to the
+			plotty pane (inside tmux, plotty installed) or a text
+			note — see |vimcmdline-notebook|. Setting 'inline'
+			EXPLICITLY skips the detection (a deliberate override
+			for terminals it cannot see). When this option is
+			unset, an explicit legacy g:cmdline_notebook_plotty
+			still wins (1 => 'plotty', 0 => 'none'). Nested tmux
+			cannot carry inline images: europa detects it, warns
+			at kernel start, and falls back (use 'plotty' there).
+
+						*cmdline_notebook_kitty_terms*
+cmdline_notebook_kitty_terms  List of terminal-name substrings the inline
+			figure detection treats as kitty-graphics capable,
+			matched against $TERM (or tmux's #{client_termname}
+			inside tmux). Default: ['kitty', 'ghostty']. Setting
+			it REPLACES the list — include the defaults if you
+			still want them. For terminals that ship virtual
+			placement support the default list cannot know
+			about: >
+	let cmdline_notebook_kitty_terms = ['kitty', 'ghostty', 'myterm']
+<
 
 							*cmdline_notebook_figure_size*
 cmdline_notebook_figure_size  Inline figure width in terminal columns, capped

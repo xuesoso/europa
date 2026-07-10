@@ -507,7 +507,7 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_enable` | `1` | Master switch (Neovim). When `0`, no notebook commands/maps exist and behavior is classic REPL only |
 | `cmdline_notebook_python` | `'python3'` | Python executable that runs the kernel bridge (needs `jupyter_client` + `ipykernel`) |
 | `cmdline_notebook_kernel_name` | `'python3'` | Jupyter kernelspec name to launch |
-| `cmdline_notebook_plotty` | `1` | Run `import plotty; plotty.enable()` at kernel start (skipped if plotty is absent) |
+| `cmdline_notebook_plotty` | _(unset)_ | **Legacy** (pre-`figures`). Only read when `cmdline_notebook_figures` is unset: `1` routes figures to the plotty pane, `0` turns figure display off. Prefer `cmdline_notebook_figures` |
 | `cmdline_notebook_startup_code` | `[]` | Extra Python lines run once at kernel start |
 | `cmdline_notebook_max_lines` | `20` | Inline output line cap per cell (`:CmdLineNotebookOpenOutput` shows the rest) |
 | `cmdline_notebook_max_kept_lines` | `10000` | Retention cap per cell: at most this many output lines are kept (first + last halves with a `··· N lines elided ···` marker), so a runaway `while True: print(...)` cannot grow memory or stutter the UI. `0` = unlimited |
@@ -533,11 +533,11 @@ let cmdline_notebook_border_color = '#5fafff'      " or 39, or 'guifg=#5fafff gu
 
 The border uses the `CmdlineNotebookBorder` highlight group, so you can also
 style it directly (e.g. `hi link CmdlineNotebookBorder FloatBorder`). To
-customize plotty (e.g. its pane size), disable the auto-enable and do it via
-the startup hook:
+customize plotty (e.g. its pane size), turn europa's own figure routing off
+and enable plotty with your options via the startup hook:
 
 ```vim
-let cmdline_notebook_plotty       = 0
+let cmdline_notebook_figures      = 'none'
 let cmdline_notebook_startup_code = ['import plotty', 'plotty.enable(size=60)']
 ```
 
