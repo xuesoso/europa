@@ -345,8 +345,10 @@ anchor output boxes stay unfolded wherever they actually are (outputs anchor
 to the line the cell ended on when it ran); cells with no output fold
 entirely. The view is live: edits track and newly added cells fold
 themselves. Your window's own fold settings (`'foldmethod'`, `'foldtext'`, …)
-are restored when toggled off — including when a `:mkview`/`:loadview` setup
-restored the collapsed state into a later session.
+are restored when toggled off — and the view is strictly **per-session**: if
+a `:mkview`/`:loadview` setup captured the collapsed state, it is dissolved
+back to your own fold settings when the file is next shown, so indent/marker
+folding of your functions always survives.
 
 ### Runaway output protection
 

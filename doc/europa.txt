@@ -315,11 +315,13 @@ Commands: >
 			saved fold settings ('foldmethod', 'foldexpr',
 			'foldtext', 'foldenable', 'foldminlines',
 			'foldlevel') — manual folds the window had are
-			cleared. A collapsed view captured by :mkview and
-			restored by :loadview in a LATER session is
-			recognized by its 'foldexpr' signature: it keeps
-			working, and toggling off falls back to the GLOBAL
-			fold options from your vimrc.
+			cleared. The view is strictly PER-SESSION: if a
+			:mkview/:loadview setup (or a session file) captured
+			the collapsed state, it is recognized by its
+			'foldexpr' signature and dissolved back to your
+			global fold options the next time the file is shown —
+			your own folding (e.g. indent folds of functions) is
+			what persists, never the presentation view.
 Options:
 							*cmdline_notebook_enable*
 cmdline_notebook_enable   Master switch for notebook mode (Neovim). Default 1

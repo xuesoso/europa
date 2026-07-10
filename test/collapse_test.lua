@@ -128,23 +128,32 @@ check('new_cell_folds_live',
 check('adjacent_cells_not_merged', vim.fn.foldclosed(18), 18)
 vim.cmd('CmdLineNotebookCollapse')
 
--- ---- view-restored collapse from a dead session self-heals ----------------
+-- ---- collapse never persists across sessions ------------------------------
 -- mkview/loadview (viewoptions containing "folds") can restore fdm=expr and
--- our foldexpr into a session with no buffer-local toggle state. ,z must
--- recognize the signature and restore the GLOBAL fold options instead of
--- re-collapsing and saving fdm=expr as the "user setting".
+-- our foldexpr into a session with no buffer-local toggle state. The plugin's
+-- BufWinEnter autocmd (which runs after a vimrc loadview autocmd) must
+-- dissolve that orphaned state back to the GLOBAL fold options — the user's
+-- own folding, not the presentation view, is what persists.
 -- NB: set the restored state with :setlocal exactly like a real view file —
 -- vim.wo assignment would clobber the GLOBAL option value too, corrupting
--- the very setting the heal is supposed to fall back to.
+-- the very setting the dissolve falls back to.
 vim.go.foldmethod = 'indent'         -- the user's vimrc-level setting
 vim.cmd('setlocal foldmethod=expr')  -- what loadview restores
 vim.cmd([[setlocal foldexpr=VimCmdLineNotebookFoldExpr(v:lnum)]])
 vim.b[buf].cmdline_code_collapsed = nil
 vim.b[buf].cmdline_code_fold_save = nil
-check('viewrestore_folds_still_work', vim.fn.foldclosed(5) > 0, true)
+check('viewrestore_folds_present', vim.fn.foldclosed(5) > 0, true)
+vim.cmd('doautocmd BufWinEnter')     -- what re-showing the buffer fires
+check('viewrestore_dissolved_foldmethod', vim.wo.foldmethod, 'indent')
+check('viewrestore_dissolved_folds', vim.fn.foldclosed(5), -1)
+
+-- ...but an ACTIVE in-session collapse survives re-entering the window.
 vim.cmd('CmdLineNotebookCollapse')
-check('viewrestore_heals_foldmethod', vim.wo.foldmethod, 'indent')
-check('viewrestore_expanded', vim.fn.foldclosed(5), -1)
+check('insession_collapsed', vim.fn.foldclosed(5) > 0, true)
+vim.cmd('doautocmd BufWinEnter')
+check('insession_survives_bufwinenter', vim.fn.foldclosed(5) > 0, true)
+vim.cmd('CmdLineNotebookCollapse')
+check('insession_expand_still_works', vim.wo.foldmethod, 'indent')
 
 if fail > 0 then
   vim.cmd('cquit!')

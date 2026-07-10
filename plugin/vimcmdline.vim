@@ -1114,17 +1114,36 @@ if has('nvim') && g:cmdline_notebook_enable
     " markdown cells and the rendered inline outputs visible; run again to
     " restore the buffer (and the window's own fold settings). Re-run after
     " adding cells to fold the new ones too.
+    " The collapsed view is TRANSIENT, per session, on purpose: it must never
+    " leak through view/session files. :mkview (with "folds" in
+    " 'viewoptions') snapshots whatever fold state the window has, so an
+    " autocmd-driven mkview/loadview setup that saves while collapsed would
+    " otherwise reopen the file collapsed in a later session — displacing the
+    " user's own fold method (e.g. indent folding of functions) with no
+    " toggle state left to undo it. The view uses 'foldexpr' folds because
+    " mkview persists 'foldexpr': the expression is a durable signature of
+    " our state. Views load on BufWinEnter, and vimrc autocmds are registered
+    " before plugin ones, so this runs right after any :loadview: a window
+    " carrying our foldexpr WITHOUT the in-session toggle flag is an orphaned
+    " restore — dissolve it back to the user's global fold options. (Within a
+    " session the flag exists, so a still-collapsed buffer re-entering a
+    " window is left alone.)
+    function! s:NotebookCollapseDissolveOrphan() abort
+        if !get(b:, 'cmdline_code_collapsed', 0)
+                    \ && &l:foldexpr =~# 'VimCmdLineNotebookFoldExpr'
+            setlocal foldmethod< foldexpr< foldtext< foldenable<
+                        \ foldminlines< foldlevel<
+        endif
+    endfunction
+    augroup VimCmdLineNotebookCollapse
+        autocmd!
+        autocmd BufWinEnter * call s:NotebookCollapseDissolveOrphan()
+    augroup END
+
     function! VimCmdLineNotebookCollapse() abort
-        " The view uses 'foldexpr' folds rather than :fold manual ones,
-        " deliberately: :mkview (with "folds" in 'viewoptions') snapshots the
-        " window's fold state, and a :loadview in a LATER session can restore
-        " a collapsed window after the buffer-local toggle state is gone.
-        " With manual folds that restore is a trap — fdm=manual sticks and a
-        " re-collapse would save it as the "user setting". mkview DOES
-        " persist 'foldexpr', so our expression doubles as a durable
-        " collapse signature: such a window is recognized as collapsed here,
-        " and the folds themselves keep working (the expr recomputes its map
-        " on first evaluation).
+        " The foldexpr signature also gates the toggle (belt and braces for
+        " an orphaned restore the autocmd above did not see, e.g. a manual
+        " :loadview into a window that never fired BufWinEnter).
         if get(b:, 'cmdline_code_collapsed', 0)
                     \ || &l:foldexpr =~# 'VimCmdLineNotebookFoldExpr'
             let l:save = get(b:, 'cmdline_code_fold_save', {})
