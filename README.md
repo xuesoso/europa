@@ -340,10 +340,12 @@ read-only floating popup — `q` or `<Esc>` closes it; use a split instead with
 `:CmdLineNotebookCollapse` toggles a **presentation view**: every non-markdown
 cell's code folds down to a single line (the `# %%` separator with its title
 and a hidden-line count), while `# %% [markdown]` cells and the rendered
-inline outputs stay visible — the buffer reads like a report. Each cell's
-last line remains unfolded (it anchors the output box). Folds track edits;
-run it twice to refresh after adding cells. Your window's own fold settings
-(`'foldmethod'`, `'foldtext'`, …) are restored when toggled off.
+inline outputs stay visible — the buffer reads like a report. The lines that
+anchor output boxes stay unfolded wherever they actually are (outputs anchor
+to the line the cell ended on when it ran); cells with no output fold
+entirely. Folds track edits; run it twice to refresh after adding cells. Your
+window's own fold settings (`'foldmethod'`, `'foldtext'`, …) are restored
+when toggled off.
 
 ### Runaway output protection
 

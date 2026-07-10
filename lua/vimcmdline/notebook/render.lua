@@ -1057,6 +1057,22 @@ function M.refresh_all_images(priority_bufnr, cursor_line)
   return n
 end
 
+-- 1-based buffer lines that currently anchor a rendered output box (live
+-- extmark positions, so they reflect any drift from buffer edits). Used by
+-- the collapse-code view to keep exactly these lines out of its folds — a
+-- closed fold hides virt_lines anchored anywhere inside it.
+function M.anchor_rows(bufnr)
+  local rows = {}
+  local ok, marks = pcall(vim.api.nvim_buf_get_extmarks, bufnr, M.ns, 0, -1, {})
+  if ok then
+    for _, m in ipairs(marks) do
+      rows[#rows + 1] = m[2] + 1
+    end
+  end
+  table.sort(rows)
+  return rows
+end
+
 -- Force an immediate redraw (called on idle / execute_reply).
 function M.finish(bufnr, cell_id)
   local c = cell(bufnr, cell_id)

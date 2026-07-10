@@ -1023,11 +1023,13 @@ if has('nvim') && g:cmdline_notebook_enable
 
     " ---- collapse code, show outputs (presentation view) ------------------
     "
-    " Fold ranges for every NON-markdown cell: [separator .. lastline-1]. The
-    " separator collapses into the foldtext line and the cell's LAST line
-    " stays visible on purpose: the inline output box is virt_lines anchored
-    " to that line, and a closed fold hides virt_lines anchored anywhere
-    " inside it — the anchor must stay out of the fold for outputs to render.
+    " Fold ranges for every NON-markdown cell. Rendered output boxes are
+    " virt_lines anchored to the buffer line the cell ended on WHEN IT RAN
+    " (drifting with edits since), and a closed fold hides virt_lines
+    " anchored anywhere inside it — so each cell folds AROUND its live output
+    " anchor lines, wherever they actually are: the gaps between anchors
+    " fold, the anchor lines stay visible. A cell with no output folds
+    " entirely (nothing to keep visible, only its foldtext header remains).
     " '# %% [markdown]' cells are prose, not raw input: left fully expanded.
     function! s:NotebookCodeFoldRanges() abort
         let l:pat = s:BlockSepPattern()
@@ -1054,26 +1056,39 @@ if has('nvim') && g:cmdline_notebook_enable
                 call add(l:regions, [l:seps[l:k], l:end])
             endfor
         endif
+        let l:anchors = v:lua.require'vimcmdline.notebook'.output_lines(bufnr('%'))
         let l:ranges = []
         for [l:rs, l:re] in l:regions
             if getline(l:rs) =~# l:mdpat
                 continue
             endif
-            if l:re - 1 >= l:rs
-                call add(l:ranges, [l:rs, l:re - 1])
+            let l:from = l:rs
+            for l:a in l:anchors
+                if l:a >= l:from && l:a <= l:re
+                    if l:a - 1 >= l:from
+                        call add(l:ranges, [l:from, l:a - 1])
+                    endif
+                    let l:from = l:a + 1
+                endif
+            endfor
+            if l:re >= l:from
+                call add(l:ranges, [l:from, l:re])
             endif
         endfor
         return l:ranges
     endfunction
 
-    " Fold line for a collapsed cell: the separator line (with any cell
-    " title) plus how much is hidden under it.
+    " Fold line for a collapsed chunk: the separator line (with any cell
+    " title) when the chunk starts on one, else a bare marker — a chunk can
+    " also be the leading import block or the code continuing below a cell's
+    " output anchor line.
     function! VimCmdLineNotebookFoldText() abort
         let l:head = getline(v:foldstart)
-        if l:head !~# s:BlockSepPattern()
-            let l:head = g:cmdline_block_sep . ' (setup)'
+        let l:n = (v:foldend - v:foldstart + 1) . ' lines hidden'
+        if l:head =~# s:BlockSepPattern()
+            return l:head . '  ⋯ ' . l:n
         endif
-        return l:head . '  ⋯ ' . (v:foldend - v:foldstart + 1) . ' lines hidden'
+        return '⋯ ' . l:n
     endfunction
 
     " Toggle: collapse all raw input code to one fold line per cell, keeping

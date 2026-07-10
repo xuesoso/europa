@@ -303,14 +303,16 @@ Commands: >
 			separator with its title and a hidden-line count —
 			while "# %% [markdown]" cells and the rendered inline
 			outputs stay visible, so the buffer reads like a
-			report. Each cell's LAST line stays unfolded on
-			purpose: the output box is anchored there, and a
-			closed fold would hide it. Folds track edits; run the
-			command twice to refresh after adding cells. The
-			window's own fold settings ('foldmethod', 'foldtext',
-			'foldenable', 'foldminlines') are saved on collapse
-			and restored when toggled off; any manual folds the
-			window had are cleared.
+			report. The lines anchoring output boxes stay
+			unfolded wherever they actually are (an output is
+			anchored to the line its cell ended on when it RAN,
+			which drifts with edits — a closed fold would hide
+			it); cells with no output fold entirely. Folds track
+			edits; run the command twice to refresh after adding
+			cells. The window's own fold settings ('foldmethod',
+			'foldtext', 'foldenable', 'foldminlines') are saved
+			on collapse and restored when toggled off; any manual
+			folds the window had are cleared.
 Options:
 							*cmdline_notebook_enable*
 cmdline_notebook_enable   Master switch for notebook mode (Neovim). Default 1

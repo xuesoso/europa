@@ -488,6 +488,11 @@ function M.retransmit_figures()
   return n
 end
 
+-- Buffer lines (1-based) currently anchoring a rendered output box.
+function M.output_lines(bufnr)
+  return render.anchor_rows(resolve(bufnr))
+end
+
 function M.clear_cell(bufnr, start_line, end_line)
   render.clear_range(resolve(bufnr), start_line, end_line)
 end
