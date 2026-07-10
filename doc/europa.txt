@@ -145,6 +145,7 @@ Mapping options (value is the key sequence to use): >
 	cmdline_map_notebook_toggle
 	cmdline_map_notebook_clear
 	cmdline_map_notebook_output
+	cmdline_map_notebook_collapse
 	cmdline_map_notebook_interrupt
 <
 For notebook-mode options see |vimcmdline-notebook|.
@@ -293,7 +294,23 @@ Commands: >
 	:CmdLineNotebookOpenOutput  open the current cell's full output in a
 			popup; a cell's inline figure is shown LARGER there
 			(~85% of the editor width, freed when the popup closes)
+	:CmdLineNotebookCollapse    toggle the presentation view (see below)
 <
+						*:CmdLineNotebookCollapse*
+:CmdLineNotebookCollapse (default mapping: ,z or <LocalLeader>z)
+			Toggle a PRESENTATION VIEW: every non-markdown cell's
+			code collapses to a single fold line — the "# %%"
+			separator with its title and a hidden-line count —
+			while "# %% [markdown]" cells and the rendered inline
+			outputs stay visible, so the buffer reads like a
+			report. Each cell's LAST line stays unfolded on
+			purpose: the output box is anchored there, and a
+			closed fold would hide it. Folds track edits; run the
+			command twice to refresh after adding cells. The
+			window's own fold settings ('foldmethod', 'foldtext',
+			'foldenable', 'foldminlines') are saved on collapse
+			and restored when toggled off; any manual folds the
+			window had are cleared.
 Options:
 							*cmdline_notebook_enable*
 cmdline_notebook_enable   Master switch for notebook mode (Neovim). Default 1

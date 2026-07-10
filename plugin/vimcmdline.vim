@@ -924,6 +924,9 @@ endif
 if !exists("g:cmdline_map_notebook_output")
     let g:cmdline_map_notebook_output = s:p . "o"
 endif
+if !exists("g:cmdline_map_notebook_collapse")
+    let g:cmdline_map_notebook_collapse = s:p . "z"
+endif
 if !exists("g:cmdline_map_notebook_interrupt")
     let g:cmdline_map_notebook_interrupt = s:p . "i"
 endif
@@ -1018,6 +1021,92 @@ if has('nvim') && g:cmdline_notebook_enable
         call v:lua.require'vimcmdline.notebook'.open_output(bufnr('%'), l:r[0], l:r[1])
     endfunction
 
+    " ---- collapse code, show outputs (presentation view) ------------------
+    "
+    " Fold ranges for every NON-markdown cell: [separator .. lastline-1]. The
+    " separator collapses into the foldtext line and the cell's LAST line
+    " stays visible on purpose: the inline output box is virt_lines anchored
+    " to that line, and a closed fold hides virt_lines anchored anywhere
+    " inside it — the anchor must stay out of the fold for outputs to render.
+    " '# %% [markdown]' cells are prose, not raw input: left fully expanded.
+    function! s:NotebookCodeFoldRanges() abort
+        let l:pat = s:BlockSepPattern()
+        " NB: \V inverts bracket semantics — bare [markdown] IS the literal
+        " text; \[ would start a character class.
+        let l:mdpat = l:pat . '\s\*[markdown]'
+        let l:seps = []
+        for l:i in range(1, line('$'))
+            if getline(l:i) =~# l:pat
+                call add(l:seps, l:i)
+            endif
+        endfor
+        " Regions: the leading unmarked block (imports etc. — code too), then
+        " one region per separator, each running to the line before the next.
+        let l:regions = []
+        if empty(l:seps)
+            call add(l:regions, [1, line('$')])
+        else
+            if l:seps[0] > 1
+                call add(l:regions, [1, l:seps[0] - 1])
+            endif
+            for l:k in range(len(l:seps))
+                let l:end = l:k + 1 < len(l:seps) ? l:seps[l:k + 1] - 1 : line('$')
+                call add(l:regions, [l:seps[l:k], l:end])
+            endfor
+        endif
+        let l:ranges = []
+        for [l:rs, l:re] in l:regions
+            if getline(l:rs) =~# l:mdpat
+                continue
+            endif
+            if l:re - 1 >= l:rs
+                call add(l:ranges, [l:rs, l:re - 1])
+            endif
+        endfor
+        return l:ranges
+    endfunction
+
+    " Fold line for a collapsed cell: the separator line (with any cell
+    " title) plus how much is hidden under it.
+    function! VimCmdLineNotebookFoldText() abort
+        let l:head = getline(v:foldstart)
+        if l:head !~# s:BlockSepPattern()
+            let l:head = g:cmdline_block_sep . ' (setup)'
+        endif
+        return l:head . '  ⋯ ' . (v:foldend - v:foldstart + 1) . ' lines hidden'
+    endfunction
+
+    " Toggle: collapse all raw input code to one fold line per cell, keeping
+    " markdown cells and the rendered inline outputs visible; run again to
+    " restore the buffer (and the window's own fold settings). Re-run after
+    " adding cells to fold the new ones too.
+    function! VimCmdLineNotebookCollapse() abort
+        if get(b:, 'cmdline_code_collapsed', 0)
+            normal! zE
+            let l:save = get(b:, 'cmdline_code_fold_save', {})
+            if has_key(l:save, 'fdm') | let &l:foldmethod = l:save.fdm | endif
+            if has_key(l:save, 'fdt') | let &l:foldtext = l:save.fdt | endif
+            if has_key(l:save, 'fen') | let &l:foldenable = l:save.fen | endif
+            if has_key(l:save, 'fml') | let &l:foldminlines = l:save.fml | endif
+            let b:cmdline_code_collapsed = 0
+            return
+        endif
+        let b:cmdline_code_fold_save =
+                    \ {'fdm': &l:foldmethod, 'fdt': &l:foldtext,
+                    \  'fen': &l:foldenable, 'fml': &l:foldminlines}
+        setlocal foldmethod=manual
+        normal! zE
+        setlocal foldenable
+        " Single-line cells produce single-line folds, which the default
+        " 'foldminlines' (1) would display OPEN.
+        setlocal foldminlines=0
+        let &l:foldtext = 'VimCmdLineNotebookFoldText()'
+        for l:r in s:NotebookCodeFoldRanges()
+            exe printf('%d,%dfold', l:r[0], l:r[1])
+        endfor
+        let b:cmdline_code_collapsed = 1
+    endfunction
+
     command! CmdLineNotebookToggle     call VimCmdLineNotebookToggle()
     " Through the same guards as the toggle: the old inline `let b:...=1 |
     " StartApp` bypassed the running-REPL check, attaching a kernel while the
@@ -1029,6 +1118,7 @@ if has('nvim') && g:cmdline_notebook_enable
     command! CmdLineNotebookClear      call VimCmdLineNotebookClear()
     command! CmdLineNotebookClearAll   call v:lua.require'vimcmdline.notebook'.clear_all_output(bufnr('%'))
     command! CmdLineNotebookOpenOutput call VimCmdLineNotebookOpenOutput()
+    command! CmdLineNotebookCollapse   call VimCmdLineNotebookCollapse()
 
     " Change the inline-figure display size live: width in columns, optional
     " height in rows (omitted/0 = keep the image's aspect ratio). Figures

@@ -113,6 +113,9 @@ In **Normal mode**:
   - `,f` — send the whole file.
   - `,i` — interrupt the running cell (e.g. to stop a runaway loop).
   - `,K` — clear the current cell's output; `,o` — open its full output in a popup.
+  - `,z` — collapse all code (presentation view): every non-markdown cell folds
+    to one line, leaving `# %% [markdown]` cells and the rendered outputs
+    visible; press again to restore.
   - `,k` — toggle notebook mode; `,s` — start a classic REPL; `,q` — quit it.
 
 In **Visual mode**, `<Space>` sends the selection.
@@ -329,10 +332,18 @@ key-repeat — never launch a second kernel.
 
 Commands: `:CmdLineNotebookToggle`, `:CmdLineNotebookStart`,
 `:CmdLineNotebookStop`, `:CmdLineNotebookRestart`, `:CmdLineNotebookInterrupt`,
-`:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`, and
+`:CmdLineNotebookClear`, `:CmdLineNotebookClearAll`,
 `:CmdLineNotebookOpenOutput` (opens the cell's full retained output in a
 read-only floating popup — `q` or `<Esc>` closes it; use a split instead with
-`cmdline_notebook_output_win`).
+`cmdline_notebook_output_win`), and `:CmdLineNotebookCollapse` (`,z`).
+
+`:CmdLineNotebookCollapse` toggles a **presentation view**: every non-markdown
+cell's code folds down to a single line (the `# %%` separator with its title
+and a hidden-line count), while `# %% [markdown]` cells and the rendered
+inline outputs stay visible — the buffer reads like a report. Each cell's
+last line remains unfolded (it anchors the output box). Folds track edits;
+run it twice to refresh after adding cells. Your window's own fold settings
+(`'foldmethod'`, `'foldtext'`, …) are restored when toggled off.
 
 ### Runaway output protection
 
@@ -429,6 +440,7 @@ sending lines is unchanged).
 | `cmdline_map_notebook_toggle` | `,k` | Toggle notebook mode |
 | `cmdline_map_notebook_clear` | `,K` | Clear the current cell's output (notebook mode) |
 | `cmdline_map_notebook_output` | `,o` | Open the current cell's full output in a popup (notebook mode) |
+| `cmdline_map_notebook_collapse` | `,z` | Toggle presentation view: fold all code cells, show only markdown cells + rendered outputs (`:CmdLineNotebookCollapse`) |
 | `cmdline_map_notebook_interrupt` | `,i` | Interrupt the running cell (`:CmdLineNotebookInterrupt`) — e.g. to stop a runaway loop |
 
 ```vim

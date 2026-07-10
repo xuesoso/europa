@@ -105,6 +105,7 @@ if has('nvim') && g:cmdline_notebook_enable
     exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_clear . ' :CmdLineNotebookClear<CR>'
     exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_output . ' :CmdLineNotebookOpenOutput<CR>'
     exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_interrupt . ' :CmdLineNotebookInterrupt<CR>'
+    exe 'nmap <buffer><silent> ' . g:cmdline_map_notebook_collapse . ' :CmdLineNotebookCollapse<CR>'
 endif
 
 call VimCmdLineSetApp("python")
