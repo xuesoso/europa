@@ -29,6 +29,35 @@ def _deps_available():
         return False
 
 
+def unit():
+    """Pure-function checks on the bridge module; no kernel/deps required
+    (the module imports jupyter_client lazily)."""
+    sys.path.insert(0, os.path.dirname(BRIDGE))
+    import vimcmdline_kernel_bridge as B
+
+    # CSI colour codes are stripped (pre-existing behaviour).
+    assert B.strip_ansi("\x1b[31mred\x1b[0m") == "red"
+    # OSC-8 hyperlinks (rich, pip): both envelopes go, the link TEXT stays.
+    assert B.strip_ansi(
+        "\x1b]8;;https://x.test\x07click\x1b]8;;\x07") == "click"
+    # OSC terminated by ST (ESC backslash) instead of BEL.
+    assert B.strip_ansi("\x1b]0;title\x1b\\after") == "after"
+    # An unterminated OSC fragment must not eat legitimate text after it.
+    assert "tail" in B.strip_ansi("\x1b]8;;split-across-chunks" + "tail")
+
+    # text/plain passes through untouched; an HTML-only bundle yields an
+    # explicit note instead of silent nothing; image bundles are exempt
+    # (the figure pipeline shows those); empty bundles stay empty.
+    assert B.text_repr({"text/plain": "42"}, False) == "42"
+    assert B.text_repr({"text/html": "<b>42</b>"}, False) \
+        == "[no text representation: text/html]"
+    assert B.text_repr({"image/png": "..."}, True) == ""
+    assert B.text_repr({}, False) == ""
+
+    print("BRIDGE UNIT TESTS PASSED")
+    return 0
+
+
 class Driver:
     def __init__(self, python=sys.executable):
         self.p = subprocess.Popen(
@@ -131,6 +160,17 @@ def run():
         joined = "".join("".join(e.get("traceback", [])) for e in errs)
         assert "\x1b[" not in joined, "ANSI escapes not stripped from traceback"
 
+        # HTML-only display output must surface an explicit note, not
+        # silent nothing (read-out fidelity: "no output" is a conclusion).
+        d.send({"type": "execute", "cell_id": 9,
+                "code": "from IPython.display import display\n"
+                        "display({'text/html': '<b>x</b>'}, raw=True)"})
+        evs = d.collect_cell(9, 60)
+        disp = [e for e in evs if e.get("type") == "display_data"
+                and e["cell_id"] == 9]
+        assert disp and "no text representation" in disp[0].get("text", ""), \
+            "html-only display did not surface a note: %r" % disp
+
         # Completion: define a dict + a uniquely named var in the live kernel,
         # then complete against both. Dict-key completion goes through the very
         # same _ipython_key_completions_ machinery pandas exposes for df["col"],
@@ -165,6 +205,10 @@ def run():
         d.close()
 
 
+def test_bridge_unit():
+    assert unit() == 0
+
+
 def test_bridge_roundtrip():
     if not _deps_available():
         import pytest
@@ -173,6 +217,9 @@ def test_bridge_roundtrip():
 
 
 if __name__ == "__main__":
+    rc = unit()
+    if rc != 0:
+        sys.exit(rc)
     if not _deps_available():
         print("SKIP: jupyter_client/ipykernel not installed")
         sys.exit(0)

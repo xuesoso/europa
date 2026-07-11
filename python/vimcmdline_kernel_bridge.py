@@ -48,8 +48,14 @@ import time
 from collections import OrderedDict
 from queue import Empty, Queue
 
-# Matches CSI escape sequences (colors etc.) so tracebacks render as plain text.
-_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+# Matches CSI escape sequences (colors etc.) AND OSC sequences (terminated by
+# BEL or ST) so output renders as plain text: rich and modern pip emit OSC-8
+# hyperlinks, which would otherwise land in the output box as raw "]8;;url"
+# garbage around the link text. The link TEXT itself sits between the two OSC
+# envelopes and survives the strip. An OSC split across stream chunks can
+# leave an unterminated fragment; requiring the terminator keeps the regex
+# from eating legitimate text after it.
+_ANSI_RE = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
 
 # Per-event text cap. The Lua side's retention is line/byte based on what
 # arrives; a single print('x' * 10**9) is ONE event, and forwarding it verbatim
@@ -69,6 +75,18 @@ def cap_text(text):
         return text
     return (text[:_MAX_TEXT]
             + "\n··· [europa: %d bytes truncated] ···\n" % (len(text) - _MAX_TEXT))
+
+
+def text_repr(data, has_image):
+    """The text/plain repr of a result/display data bundle — or, when the
+    bundle carries NO text/plain, an explicit note naming the mimetypes it
+    does carry. An HTML-only repr must never render as silent nothing: that
+    is the worst read-out failure mode (the user concludes "no output").
+    Image-bearing bundles are exempt — the figure pipeline displays those."""
+    text = data.get("text/plain", "")
+    if text or not data or has_image:
+        return text
+    return "[no text representation: %s]" % ", ".join(sorted(data))
 
 
 def png_size(data):
@@ -527,14 +545,15 @@ class Bridge:
         elif mtype == "execute_result":
             data = content.get("data", {})
             emit({"type": "execute_result",
-                  "text": self._clean_text(data.get("text/plain", "")),
+                  "text": self._clean_text(text_repr(data, False)),
                   "execution_count": content.get("execution_count"),
                   "cell_id": cell_id})
         elif mtype == "display_data":
             data = content.get("data", {})
+            has_image = any(k.startswith("image/") for k in data)
             ev = {"type": "display_data",
-                  "text": self._clean_text(data.get("text/plain", "")),
-                  "has_image": any(k.startswith("image/") for k in data),
+                  "text": self._clean_text(text_repr(data, has_image)),
+                  "has_image": has_image,
                   "cell_id": cell_id}
             if self.inline_images and self.image_dir and "image/png" in data:
                 saved = self._save_png(data["image/png"], cell_id)
