@@ -8,12 +8,9 @@
 into `# %%` cells, run them through a headless [Jupyter] kernel, and see each
 cell's text output rendered **inline, directly under the cell**:
 
-```
-╭─────────────╮
-│ hello world │
-│ 42          │
-╰─────────────╯
-```
+<p align="center">
+  <img src="examples/demo.gif" alt="europa demo" width="720">
+</p>
 
 Plots are drawn **inline in the cell output** via the kitty graphics protocol
 (works over tmux and SSH), or in **[plotty]**'s tmux pane (sixel/kitty) —
