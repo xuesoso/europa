@@ -788,10 +788,14 @@ local function redraw(bufnr, cell_id)
   local lines = display_lines(c)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
   -- embedded in the top border for cells with output, or as a single rule line
-  -- for cells with none.
-  -- In 'left' marker mode the status lives in the gutter instead.
+  -- for cells with none. In 'left' marker mode the gutter always carries the
+  -- status, so the border marker is drawn ONLY where it is free — embedded in
+  -- a top border that exists anyway. It must never cost a line there: no rule
+  -- line for output-less cells, and no leading title line when the border
+  -- style draws no box (build_virt's borderless fallback).
   local title = nil
-  if c.marker and c.marker ~= 'left' and c.done then
+  if c.marker and c.done
+      and (c.marker ~= 'left' or (#lines > 0 and BORDERS[c.border] ~= nil)) then
     local label = c.ok and '✓' or '✗'
     -- Guard the format: an aborted cell has no execution count (see mark_done),
     -- and only a real number is valid for '%d'.

@@ -8,7 +8,10 @@
 --   * everything stays in the sign column — NO virtual text in the text area,
 --     so the separator line never shifts;
 --   * a finished no-output cell draws NO rule line in 'left' mode (that is
---     the vertical space this mode buys);
+--     the vertical space this mode buys); a cell WITH output additionally
+--     embeds "✓ [N]" in the box's top border — free, the line exists anyway —
+--     but never when the border style draws no box (a title there would cost
+--     a leading line);
 --   * running → ● (run hl); ok → count digits (ok hl); error → digits
 --     (err hl); aborted (count=nil) → ✗; counts past 99 → '++' (sign_text is
 --     capped at 2 cells);
@@ -65,6 +68,21 @@ local function nmarks(ns)
   return #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
 end
 
+-- Does any rendered output (virt_lines) contain `text`?
+local function virt_has(text)
+  local mk = vim.api.nvim_buf_get_extmarks(buf, render.ns, 0, -1, { details = true })
+  for _, m in ipairs(mk) do
+    for _, line in ipairs(m[4].virt_lines or {}) do
+      for _, chunk in ipairs(line) do
+        if chunk[1]:find(text, 1, true) then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
 -- ---- running state, cell with separator (lines 4..5, sep 3) ---------------
 render.begin(buf, 1, 4, 5, 20, 'rounded', 'left', nil)
 check('running_badge_on_separator', gutter_at(3).sign, '●')
@@ -82,8 +100,11 @@ render.mark_done(buf, 1, 3, 'ok')
 check('ok_badge_is_count', gutter_at(3).sign, '3')
 check('ok_badge_hl', gutter_at(3).hl, 'CmdlineNotebookGutterOk')
 check('ok_bar_hl_body', gutter_at(5).hl, 'CmdlineNotebookGutterOk')
--- The output box still renders (one anchor mark in the output namespace)...
+-- The output box still renders (one anchor mark in the output namespace),
+-- and since its top border exists anyway, the "✓ [N]" marker rides it for
+-- free — 'left' + output shows BOTH gutter and border marker.
 check('output_box_rendered', nmarks(render.ns), 1)
+check('border_marker_embedded', virt_has('✓ [3]'), true)
 -- ...and anchor_rows sees ONLY it — the bar marks must not leak into the
 -- collapse view's visible-line set.
 local rows = render.anchor_rows(buf)
@@ -103,6 +124,7 @@ render.mark_done(buf, 3, 12, 'error')
 check('err_badge_two_digits', gutter_at(6).sign, '12')
 check('err_badge_hl', gutter_at(6).hl, 'CmdlineNotebookGutterErr')
 check('err_hl_body', gutter_at(7).hl, 'CmdlineNotebookGutterErr')
+check('err_border_marker_embedded', virt_has('✗ [12]'), true)
 
 -- ---- aborted cell: execution_count arrives as vim.NIL → ✗ -----------------
 render.begin(buf, 4, 7, 7, 20, 'rounded', 'left', nil)
@@ -114,6 +136,13 @@ check('aborted_badge_hl', gutter_at(6).hl, 'CmdlineNotebookGutterErr')
 render.begin(buf, 5, 7, 7, 20, 'rounded', 'left', nil)
 render.mark_done(buf, 5, 100, 'ok')
 check('count_over_99_degrades', gutter_at(6).sign, '++')
+
+-- ---- borderless output: no border line to embed into → no title line ------
+render.begin(buf, 51, 7, 7, 20, 'none', 'left', nil)
+render.add(buf, 51, 'stdout', 'hello\n')
+render.mark_done(buf, 51, 55, 'ok')
+check('borderless_output_rendered', virt_has('hello'), true)
+check('borderless_no_title_line', virt_has('[55]'), false)
 
 -- ---- leading cell without separator: badge on its own first line ----------
 render.begin(buf, 6, 1, 2, 20, 'rounded', 'left', nil)

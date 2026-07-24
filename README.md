@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.6.0-blue)
+![version](https://img.shields.io/badge/version-2.6.1-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -185,16 +185,19 @@ cell's output), `,o` (open its full output in a popup), and `,i` (interrupt the
 running cell).
 
 Each executed cell is marked with its execution count and run status. By
-default (`cmdline_notebook_exec_marker = 'left'`) the marker lives entirely in
-the left sign column, costing no vertical space and never shifting any text: a
+default (`cmdline_notebook_exec_marker = 'left'`) the marker lives in the
+left sign column, costing no vertical space and never shifting any text: a
 colored bar spans the cell, and the sign on the `# %%` line is the execution
 count itself — the color is the status (green = ok, red = failed, yellow `●` =
 running, `✗` = aborted).
 
 ```
-3  # %% load data              everything lives in the sign column —
-▎  df = pd.read_csv("data.csv")  '3' green / red carries the status,
-▎  df.head()                     code lines never move
+3  # %% load data              '3' green / red carries the status,
+▎  df = pd.read_csv("data.csv")  code lines never move; the classic
+▎  df.head()                     ✓ [N] rides the output box border
+   ╭─ ✓ [3] ─────────╮           (free — the line exists anyway),
+   │    a    b       │           and cells with no output draw
+   ╰─────────────────╯           nothing below at all
 ```
 
 The gutter signs use priority 9, one below the `:sign place` default (10) used
