@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.5.1
+Version:         2.6.0
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -472,11 +472,44 @@ cmdline_notebook_figure_cell_aspect  Terminal cell height/width ratio used to
 			aspect. Default: 2.0.
 
 							*cmdline_notebook_exec_marker*
-cmdline_notebook_exec_marker  When 1 (default), mark each executed cell with
-			"✓ [N]" ("✗ [N]" on error), where N is the kernel
-			execution count: embedded in the output box's top border,
-			or a single rule line ("─── ✓ [N] ───") for cells with no
-			output, so they still show that they ran. 0 to disable.
+cmdline_notebook_exec_marker  Where to mark each executed cell with its
+			execution count N and run status. Values:
+
+			'left' (default)~
+			Drawn entirely in the 'signcolumn' instead, costing
+			no vertical space and never shifting any text: a
+			colored bar spans the cell (separator line included),
+			and the separator line's sign is the execution count
+			itself — the COLOR is the status: green on success,
+			red on failure, a yellow "●" while queued/running,
+			"✗" for an aborted cell (which has no count). Counts
+			past 99 display as "++" (a sign is at most 2 cells).
+			The below-cell rule line and border marker are
+			suppressed. Needs 'signcolumn' "auto" (the default)
+			or "yes"; the marks track buffer edits and are
+			removed when the cell reruns or its output is
+			cleared.
+
+			The signs use priority 9 — one below the |:sign-place|
+			default (10) used by bookmark/marks plugins — so with
+			a 1-slot 'signcolumn' your own signs win the line,
+			and with >
+				set signcolumn=auto:2
+<			bookmarks and the bar display side by side. Colors
+			come from these groups (fg-only by default so the bar
+			is not a solid block):
+				CmdlineNotebookGutterOk   → DiagnosticOk
+				CmdlineNotebookGutterErr  → DiagnosticError
+				CmdlineNotebookGutterRun  → DiagnosticWarn
+
+			1 or 'below'~
+			The classic style: "✓ [N]" ("✗ [N]" on error)
+			embedded in the output box's top border, or a single
+			rule line ("─── ✓ [N] ───") for cells with no output,
+			so they still show that they ran.
+
+			0~
+			No marker at all.
 
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*

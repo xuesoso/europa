@@ -25,7 +25,19 @@ function M.read()
   cfg.kernel_timeout = tonumber(gget('cmdline_notebook_kernel_timeout', 30)) or 30
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
-  cfg.exec_marker = truthy(gget('cmdline_notebook_exec_marker', 1))
+  -- Run-marker placement: 'below' (the "✓ [N]" in the output box border, or a
+  -- rule line for cells with no output), 'left' (colored bar in the sign
+  -- column spanning the cell, the separator line's sign showing the execution
+  -- count — costs no buffer lines and never shifts text), or false (no
+  -- marker). Legacy boolean values map onto 'below'/off.
+  local marker = gget('cmdline_notebook_exec_marker', 'left')
+  if marker == 'left' then
+    cfg.exec_marker = 'left'
+  elseif marker == 'below' or truthy(marker) then
+    cfg.exec_marker = 'below'
+  else
+    cfg.exec_marker = false
+  end
   -- Figure routing: 'inline' (kitty graphics in the cell output — the
   -- default), 'plotty' (tmux pane), or 'none'. Resolved HERE rather than
   -- materialized into a global by the plugin, so the inline gate can read

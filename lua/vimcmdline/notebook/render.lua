@@ -4,6 +4,11 @@ local image = require('vimcmdline.notebook.image')
 local M = {}
 
 M.ns = vim.api.nvim_create_namespace('vimcmdline_notebook')
+-- Left-gutter run marker (exec_marker = 'left'). Its marks live in their OWN
+-- namespace: anchor_rows() treats every M.ns extmark as an output anchor, and
+-- the collapse view would pin every bar-decorated code line visible if the
+-- gutter shared it.
+M.gutter_ns = vim.api.nvim_create_namespace('vimcmdline_notebook_gutter')
 
 -- bufnr -> { cells = { [cell_id] = {end_line,start_line,segments,mark_id,pending,max_lines} } }
 local state = {}
@@ -784,8 +789,9 @@ local function redraw(bufnr, cell_id)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
   -- embedded in the top border for cells with output, or as a single rule line
   -- for cells with none.
+  -- In 'left' marker mode the status lives in the gutter instead.
   local title = nil
-  if c.marker and c.done then
+  if c.marker and c.marker ~= 'left' and c.done then
     local label = c.ok and '✓' or '✗'
     -- Guard the format: an aborted cell has no execution count (see mark_done),
     -- and only a real number is valid for '%d'.
@@ -854,6 +860,107 @@ local function schedule(bufnr, cell_id)
   end, REDRAW_DEBOUNCE_MS)
 end
 
+-- Left-gutter run marker (cmdline_notebook_exec_marker = 'left'): a colored
+-- bar in the sign column spanning the cell, whose sign on the separator line
+-- (or on the first line, for a leading cell with no separator) is the
+-- execution count itself — the status is the COLOR (green ok / red failed /
+-- yellow ● while running; ✗ for aborted cells, which have no count). Zero
+-- vertical cost: the box-border marker and the no-output rule line are
+-- suppressed in this mode, and nothing is drawn in the text area, so code
+-- lines never shift. One extmark sign per cell line.
+local GUTTER_BAR = '▎'
+local GUTTER_HL = {
+  run = 'CmdlineNotebookGutterRun',
+  ok  = 'CmdlineNotebookGutterOk',
+  err = 'CmdlineNotebookGutterErr',
+}
+-- Legacy :sign place (bookmark/marks plugins) defaults to priority 10.
+-- Sitting just below means the user's signs win the line under a 1-slot
+-- 'signcolumn', and take the LEFT slot under auto:2 (higher priority fills
+-- leftmost), keeping our bar hugging the code.
+local GUTTER_PRIORITY = 9
+
+local function gutter_state(c)
+  if not c.done then
+    return 'run'
+  end
+  return c.ok and 'ok' or 'err'
+end
+
+-- sign_text is capped at 2 display cells, so the count sign degrades to '++'
+-- past 99.
+local function badge_sign(c)
+  if not c.done then
+    return '●'
+  end
+  if type(c.count) == 'number' then
+    return c.count <= 99 and tostring(c.count) or '++'
+  end
+  return '✗'
+end
+
+local function free_gutter(bufnr, c)
+  for _, id in ipairs(c.gutter_ids or {}) do
+    pcall(vim.api.nvim_buf_del_extmark, bufnr, M.gutter_ns, id)
+  end
+  c.gutter_ids = nil
+end
+
+-- Repaint a cell's gutter in the color of its current state. Each mark is
+-- updated in place at its LIVE (drifted) position, so edits made while the
+-- cell ran don't snap the bar back to stale coordinates; marks whose line was
+-- deleted (invalidated) stay dead rather than resurrecting elsewhere.
+local function paint_gutter(bufnr, c)
+  local hl = GUTTER_HL[gutter_state(c)]
+  for i, id in ipairs(c.gutter_ids or {}) do
+    local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, M.gutter_ns, id,
+                          { details = true })
+    if ok and pos and #pos > 0 and not (pos[3] and pos[3].invalid) then
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, M.gutter_ns, pos[1], 0, {
+        id = id,
+        sign_text = i == 1 and badge_sign(c) or GUTTER_BAR,
+        sign_hl_group = hl,
+        priority = GUTTER_PRIORITY,
+        invalidate = true,
+        undo_restore = false,
+      })
+    end
+  end
+end
+
+local function make_gutter(bufnr, c)
+  free_gutter(bufnr, c)
+  -- The executed range starts BELOW the '# %%' line, but visually the marker
+  -- belongs to the whole cell: start on the separator when there is one.
+  local first = c.start_line
+  local sep = vim.g.cmdline_block_sep
+  if type(sep) ~= 'string' or sep == '' then
+    sep = '# %%'
+  end
+  if first > 1 then
+    local above = vim.api.nvim_buf_get_lines(bufnr, first - 2, first - 1, false)[1] or ''
+    if above:find(sep, 1, true) then
+      first = first - 1
+    end
+  end
+  local ids = {}
+  local last = math.min(c.end_line, vim.api.nvim_buf_line_count(bufnr))
+  for l = first, last do
+    local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.gutter_ns, l - 1, 0, {
+      sign_text = GUTTER_BAR,
+      sign_hl_group = GUTTER_HL.run,
+      priority = GUTTER_PRIORITY,
+      invalidate = true,
+      undo_restore = false,
+    })
+    if ok then
+      ids[#ids + 1] = id
+    end
+  end
+  c.gutter_ids = ids
+  paint_gutter(bufnr, c)  -- turns the first mark's sign into the badge
+end
+
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
 -- `max_kept` is the retention cap (nil => 10000 default; 0 => unlimited).
 function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker, ft, max_kept)
@@ -871,6 +978,7 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     sync_cell_pos(bufnr, c)
     if c.start_line <= end_line and c.end_line >= start_line then
       free_cell_images(c)
+      free_gutter(bufnr, c)
       if c.mark_id then
         pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns, c.mark_id)
       end
@@ -901,6 +1009,9 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
     fig_bytes = 0,
     notified = false,
   }
+  if marker == 'left' then
+    make_gutter(bufnr, s.cells[cell_id])
+  end
 end
 
 -- Mark a cell finished: record the execution count and ok/error status so the
@@ -920,6 +1031,9 @@ function M.mark_done(bufnr, cell_id, count, status)
   c.pending = false
   c.count = type(count) == 'number' and count or nil
   c.ok = status == 'ok'
+  if c.gutter_ids then
+    paint_gutter(bufnr, c)
+  end
   redraw(bufnr, cell_id)
 end
 
@@ -1085,6 +1199,7 @@ end
 
 function M.clear_all(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.ns, 0, -1)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, M.gutter_ns, 0, -1)
   if state[bufnr] then
     for _, c in pairs(state[bufnr].cells) do
       free_cell_images(c)
@@ -1105,6 +1220,7 @@ function M.clear_range(bufnr, start_line, end_line)
       sync_cell_pos(bufnr, c)
       if c.end_line >= start_line and c.end_line <= end_line then
         free_cell_images(c)
+        free_gutter(bufnr, c)
         s.cells[id] = nil
       end
     end

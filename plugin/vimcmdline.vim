@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.5.1
+" Version: 2.6.0
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.5.1"
+let g:cmdline_version = "2.6.0"
 
 " Set option
 if has("nvim")
@@ -91,7 +91,9 @@ let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
 let g:cmdline_notebook_output_win = get(g:, 'cmdline_notebook_output_win', 'float')
-let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 1)
+" Run-status marker: 'left' (default — count + status color in the sign
+" column), 'below'/1 (in the output border / rule line), 0 (off).
+let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 'left')
 let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 50)
 let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 200)
 let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cell_aspect', 2.0)
@@ -948,6 +950,13 @@ if has('nvim') && g:cmdline_notebook_enable
         hi default link CmdlineNotebookResult Identifier
         hi default link CmdlineNotebookPrompt Comment
         hi default link CmdlineNotebookOk     DiagnosticOk
+        " Left-gutter run marker (g:cmdline_notebook_exec_marker = 'left').
+        " Deliberately NOT linked to the Error/Ok content groups above:
+        " ErrorMsg commonly styles a background, which would render the
+        " sign-column bar as a solid colored block.
+        hi default link CmdlineNotebookGutterOk  DiagnosticOk
+        hi default link CmdlineNotebookGutterErr DiagnosticError
+        hi default link CmdlineNotebookGutterRun DiagnosticWarn
         if exists('g:cmdline_notebook_border_color') && !empty(g:cmdline_notebook_border_color)
             let l:c = g:cmdline_notebook_border_color
             if l:c =~? '^#[a-f0-9]\{6}$'
