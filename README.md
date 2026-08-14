@@ -1,7 +1,7 @@
 # europa
 
 [![CI](https://github.com/xuesoso/europa/actions/workflows/ci.yml/badge.svg)](https://github.com/xuesoso/europa/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-2.6.1-blue)
+![version](https://img.shields.io/badge/version-2.7.0-blue)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
 **europa** runs your code like a Jupyter notebook inside Neovim: split a file
@@ -185,30 +185,57 @@ cell's output), `,o` (open its full output in a popup), and `,i` (interrupt the
 running cell).
 
 Each executed cell is marked with its execution count and run status. By
-default (`cmdline_notebook_exec_marker = 'left'`) the marker lives in the
-left sign column, costing no vertical space and never shifting any text: a
-colored bar spans the cell, and the sign on the `# %%` line is the execution
-count itself — the color is the status (green = ok, red = failed, yellow `●` =
-running, `✗` = aborted).
+default (`cmdline_notebook_exec_marker = 'separator'`) the marker is a
+`✓ [N]` badge drawn as virtual text **on the cell's own last line,
+right-aligned to the window edge** (`cmdline_notebook_marker_col`: a number
+moves it to a fixed column instead — a fraction of the window width, or an
+absolute column when > 1) — green on success, **orange** on error, a yellow
+`●` while running. One uniform rule: the badge sits at the bottom of the cell
+it describes, directly above the cell's output box, with no last-cell special
+case and never on a `# %%` line. It costs zero lines and never shifts any
+text, and a cell that has not run shows nothing at all (its `# %%` stays
+plain comment color — that *is* the not-run state).
 
 ```
-3  # %% load data              '3' green / red carries the status,
-▎  df = pd.read_csv("data.csv")  code lines never move; the classic
-▎  df.head()                     ✓ [N] rides the output box border
-   ╭─ ✓ [3] ─────────╮           (free — the line exists anyway),
-   │    a    b       │           and cells with no output draw
-   ╰─────────────────╯           nothing below at all
+━━━━ load data
+df = pd.read_csv("data.csv")              ✓ [3]
+   ╭─────────────────╮             ↑ badge on the cell's last line,
+   │    a    b       │               right-aligned at the window edge
+   ╰─────────────────╯
+━━━━ transform
+x = df["a"] / 0                           ✗ [4]
+   ╭──────────────────╮
+   │ ZeroDivisionError │
+   ╰──────────────────╯
+━━━━ plot
+plt.plot(x)                        ← not run: stays plain, nothing drawn
 ```
 
-The gutter signs use priority 9, one below the `:sign place` default (10) used
-by bookmark/marks plugins: with the default 1-slot `signcolumn`, your bookmark
-wins its line; with `set signcolumn=auto:2`, bookmarks and the bar show side
-by side.
+In active notebook buffers the `# %%` token itself is displayed as a **blue
+horizontal bar** (`cmdline_notebook_sep_icon`, default `'━'` — a single
+character repeats to fill the token's width; box-drawing, the same family
+the output borders already require. Multi-character values like `'>>'` show
+as-is; set `''` to keep the literal text) — a
+display-only overlay padded to the token's exact width, so nothing after it
+ever shifts and the file is untouched; the line under the cursor shows the
+real text for editing.
 
-With `cmdline_notebook_exec_marker = 'below'` (or `1`, the classic style) the
-marker is drawn as `✓ [N]` (`✗ [N]` on error) embedded in the output box's top
-border, or as a single rule line (`─── ✓ [N] ───`) for cells with no output.
-`0` disables the marker entirely.
+Colors come from `CmdlineNotebookSepOk` / `CmdlineNotebookSepErr` /
+`CmdlineNotebookSepRun` (the error orange is deliberate — override the group
+to change it).
+
+Alternative styles:
+
+- `'left'` — a colored bar in the sign column spans the cell and the sign on
+  the `# %%` line is the execution count itself (green = ok, red = failed,
+  yellow `●` = running, `✗` = aborted). The gutter signs use priority 9, one
+  below the `:sign place` default (10) used by bookmark/marks plugins: with
+  the default 1-slot `signcolumn`, your bookmark wins its line; with
+  `set signcolumn=auto:2`, bookmarks and the bar show side by side.
+- `'below'` (or `1`, the classic style) — `✓ [N]` (`✗ [N]` on error) embedded
+  in the output box's top border, or a single rule line (`─── ✓ [N] ───`) for
+  cells with no output.
+- `0` — no marker at all.
 
 ### Inline figures (kitty graphics)
 
@@ -552,7 +579,9 @@ let cmdline_app['sh']     = 'bash'
 | `cmdline_notebook_statusline` | `1` | Show a kernel-status segment in `'statusline'` and in vim-airline |
 | `cmdline_notebook_airline_section` | `'x'` | vim-airline section to put the kernel status in (`'a'`…`'z'`) |
 | `cmdline_notebook_output_win` | `'float'` | `:CmdLineNotebookOpenOutput` window: `'float'` (popup) or `'split'` |
-| `cmdline_notebook_exec_marker` | `'left'` | Mark each executed cell with its execution count and status. `'left'`: a colored sign-column bar spanning the cell, the `# %%` line's sign showing the count, color showing the status (zero vertical cost, no text shift). `1`/`'below'`: `✓ [N]` in the output border / as a rule line. `0`: off |
+| `cmdline_notebook_exec_marker` | `'separator'` | Mark each executed cell with its execution count and status. `'separator'`: a `✓ [N]` badge right-aligned on the cell's own last line (green ok / orange error / yellow `●` running; unrun cells stay plain). `'left'`: a colored sign-column bar spanning the cell, the `# %%` line's sign showing the count. `1`/`'below'`: `✓ [N]` in the output border / as a rule line. `0`: off |
+| `cmdline_notebook_marker_col` | `'right'` | Column of the `'separator'` badge: `'right'` right-aligns it to the window edge; a number ≤ 1 is a fraction of the window's text width (`0.5` = mid-window), > 1 an absolute column. Repaints live on window resize |
+| `cmdline_notebook_sep_icon` | `'━'` | Icon displayed over the `# %%` token in active notebook buffers (`'separator'` style; a single char repeats to fill the token — a blue bar by default via `CmdlineNotebookSepIcon`; display-only, width-matched so nothing shifts; cursor line stays literal). `''` disables |
 | `cmdline_notebook_figures` | `'inline'` | Figure routing: `'inline'` (kitty graphics drawn inside the cell output), `'plotty'` (tmux pane), or `'none'`. An explicit legacy `cmdline_notebook_plotty` still wins when this is unset. Setting `'inline'` explicitly skips the terminal detection |
 | `cmdline_notebook_kitty_terms` | `['kitty', 'ghostty']` | Terminal-name substrings the inline-figure gate treats as kitty-graphics capable (matched against `$TERM`, or tmux's `#{client_termname}` inside tmux). Setting it **replaces** the list — see [terminal compatibility](#terminal-compatibility-for-inline-figures) |
 | `cmdline_notebook_figure_size` | `50` | Inline figure width in terminal columns (capped to the window); applies live |

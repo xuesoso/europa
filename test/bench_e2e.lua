@@ -99,14 +99,20 @@ local ok = vim.wait(120000, function() return nb.pending(buf) == 0 end, 2)
 local t_runall = ms(vim.loop.hrtime() - t0)
 if not ok then fail = fail + 1; print('FAIL run-all timeout') end
 
--- Correctness: the last run-all cell must show a success marker. Under the
--- default exec_marker = 'left' the cells (no output) draw nothing below —
--- success is the gutter badge/bar painted in the ok color.
+-- Correctness: the last run-all cell must show a success marker. The cells
+-- have no output, so nothing renders below them — success is the marker
+-- decoration: under the default 'separator' style, an ok-colored badge on
+-- the cell's own last line; under 'left', an ok-colored gutter sign.
 vim.wait(300, function() return false end, 50)
 local seen_ok = false
 local gm = vim.api.nvim_buf_get_extmarks(buf, render.gutter_ns, 0, -1, { details = true })
 for _, m in ipairs(gm) do
-  if m[4] and m[4].sign_hl_group == 'CmdlineNotebookGutterOk' then seen_ok = true end
+  local d = m[4] or {}
+  if d.sign_hl_group == 'CmdlineNotebookGutterOk'
+      or (d.virt_text and d.virt_text[1]
+          and d.virt_text[1][2] == 'CmdlineNotebookSepOk') then
+    seen_ok = true
+  end
 end
 if not seen_ok then fail = fail + 1; print('FAIL no success marker after run-all') end
 

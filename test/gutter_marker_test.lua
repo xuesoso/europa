@@ -1,25 +1,24 @@
--- exec_marker = 'left': run status drawn in the LEFT gutter — a colored bar
--- (sign column) spanning the cell, the separator line's sign showing the
--- execution count (status = color) — instead of the below-cell rule / border
--- marker. Invariants:
---   * gutter marks live in render.gutter_ns, NEVER render.ns: anchor_rows()
---     treats every render.ns mark as an output anchor and the collapse view
---     would pin every bar line visible;
---   * everything stays in the sign column — NO virtual text in the text area,
---     so the separator line never shifts;
---   * a finished no-output cell draws NO rule line in 'left' mode (that is
---     the vertical space this mode buys); a cell WITH output additionally
---     embeds "✓ [N]" in the box's top border — free, the line exists anyway —
---     but never when the border style draws no box (a title there would cost
---     a leading line);
---   * running → ● (run hl); ok → count digits (ok hl); error → digits
---     (err hl); aborted (count=nil) → ✗; counts past 99 → '++' (sign_text is
---     capped at 2 cells);
---   * priority 9: legacy :sign place (bookmark plugins) defaults to 10, so
---     user signs win a 1-slot 'signcolumn' and coexist under auto:2;
---   * bar covers the separator line when the cell has one, else the cell's
---     first line; marks drift with edits; reruns and the clear paths remove
---     them.
+-- Run-marker styles (cmdline_notebook_exec_marker) and the separator icon.
+-- Three sections:
+--
+-- 'left': a colored bar (sign column) spans the cell, the separator line's
+-- sign is the execution count (status = color). Invariants: everything stays
+-- in the sign column (no virt_text, nothing shifts); no rule line for
+-- no-output cells, but cells WITH output embed "✓ [N]" in the box's top
+-- border (free — never when the border style draws no box); running → ● /
+-- ok → digits / error → digits / aborted → ✗ / past 99 → '++' (sign_text is
+-- capped at 2 cells); priority 9 so bookmark signs (legacy default 10) win a
+-- 1-slot 'signcolumn' and coexist under auto:2.
+--
+-- 'separator' (the DEFAULT): a "✓ [N]" badge as virt_text on the cell's own
+-- LAST line — see that section's header for its invariants.
+--
+-- Separator icon: '# %%' displayed as a horizontal bar — see that section.
+--
+-- Shared invariants: all marker decorations live in render.gutter_ns, NEVER
+-- render.ns — anchor_rows() treats every render.ns mark as an output anchor
+-- and the collapse view would pin every decorated line visible; marks drift
+-- with edits; reruns and the clear paths remove them.
 --   nvim --headless -u NONE -N -l test/gutter_marker_test.lua
 vim.opt.rtp:prepend('.')
 vim.g.cmdline_notebook_enable = 1
@@ -50,8 +49,9 @@ vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
 })
 vim.api.nvim_win_set_buf(0, buf)
 
--- Gutter mark for a line: {sign, hl, priority, virt} (virt = any virt_text,
--- which must always be nil — the gutter never draws in the text area).
+-- Marker decoration for a line: sign fields ('left' style: sign/hl/prio;
+-- virt must be nil there — that style never draws in the text area) and
+-- virt_text fields ('separator' style: virt/vcol/vpos).
 local function gutter_at(lnum)
   local marks = vim.api.nvim_buf_get_extmarks(buf, render.gutter_ns,
     { lnum - 1, 0 }, { lnum - 1, -1 }, { details = true })
@@ -61,7 +61,8 @@ local function gutter_at(lnum)
   local d = marks[1][4]
   -- nvim pads sign_text to the sign column's 2 cells; compare it trimmed.
   return { sign = (d.sign_text or ''):gsub('%s+$', ''),
-           hl = d.sign_hl_group, prio = d.priority, virt = d.virt_text }
+           hl = d.sign_hl_group, prio = d.priority, virt = d.virt_text,
+           vcol = d.virt_text_win_col, vpos = d.virt_text_pos }
 end
 
 local function nmarks(ns)
@@ -181,9 +182,160 @@ check('clear_range_pre', nmarks(render.gutter_ns) > 0, true)
 render.clear_range(buf, 4, 5)
 check('clear_range_clears_gutter', nmarks(render.gutter_ns), 0)
 
+-- ==== 'separator' style (the DEFAULT): badge on the cell's LAST line =====
+-- A "✓ [N]" badge as right-aligned virt_text on the cell's own last executed
+-- line — the row just above the next '# %%', and simply the cell's end for
+-- the final block (one uniform rule, no last-cell special case). Separator
+-- lines never carry a badge. Unrun cells get NOTHING drawn — a plain
+-- comment-colored '# %%' is the not-run state — and the border-embedded
+-- marker is suppressed in this style (the badge sits right above the output
+-- box; embedding would duplicate it). Err is orange (CmdlineNotebookSepErr),
+-- not red, per the style's design.
+render.clear_all(buf)
+render.begin(buf, 20, 4, 5, 20, 'rounded', 'separator', nil)
+local sb = gutter_at(5)
+check('sep_running_badge_on_end_line', sb and sb.virt[1][1], '●')
+check('sep_running_hl', sb and sb.virt[1][2], 'CmdlineNotebookSepRun')
+-- Default column: right-aligned to the window edge
+-- (g:cmdline_notebook_marker_col = 'right'); numbers opt into a fixed
+-- column, tested further below.
+check('sep_badge_right_aligned', sb and sb.vpos, 'right_align')
+check('sep_badge_no_fixed_col', sb and sb.vcol, nil)
+check('sep_no_sign_column_use', sb and sb.sign, '')
+check('sep_separator_line_untouched', gutter_at(6), nil)
+check('sep_unrun_cells_undecorated', nmarks(render.gutter_ns), 1)
+render.add(buf, 20, 'result', '3\n')
+render.mark_done(buf, 20, 3, 'ok')
+sb = gutter_at(5)
+check('sep_ok_badge', sb.virt[1][1], '✓ [3]')
+check('sep_ok_hl', sb.virt[1][2], 'CmdlineNotebookSepOk')
+-- No border embed in this style: the badge is directly above the box.
+check('sep_output_box_rendered', nmarks(render.ns), 1)
+check('sep_no_border_embed', virt_has('✓ [3]'), false)
+
+-- error → orange ✗ [N]
+render.begin(buf, 21, 4, 5, 20, 'rounded', 'separator', nil)
+render.add(buf, 21, 'error', 'boom\n')
+render.mark_done(buf, 21, 4, 'error')
+sb = gutter_at(5)
+check('sep_err_badge', sb.virt[1][1], '✗ [4]')
+check('sep_err_hl', sb.virt[1][2], 'CmdlineNotebookSepErr')
+
+-- no-output cell: badge only — nothing rendered below the cell
+render.begin(buf, 22, 4, 5, 20, 'rounded', 'separator', nil)
+render.mark_done(buf, 22, 5, 'ok')
+check('sep_no_output_badge', gutter_at(5).virt[1][1], '✓ [5]')
+check('sep_no_output_no_rule_line', nmarks(render.ns), 0)
+
+-- LAST cell (no '# %%' below): same rule, badge on its end line — running,
+-- with output, and the once-swallowed no-output case all show the same way
+render.begin(buf, 23, 7, 7, 20, 'rounded', 'separator', nil)
+check('sep_last_cell_running', gutter_at(7).virt[1][1], '●')
+render.add(buf, 23, 'stdout', 'done\n')
+render.mark_done(buf, 23, 9, 'ok')
+check('sep_last_cell_badge', gutter_at(7).virt[1][1], '✓ [9]')
+check('sep_last_cell_no_border_embed', virt_has('✓ [9]'), false)
+render.begin(buf, 24, 7, 7, 20, 'rounded', 'separator', nil)
+render.mark_done(buf, 24, 10, 'ok')
+check('sep_last_cell_no_output_badge', gutter_at(7).virt[1][1], '✓ [10]')
+check('sep_last_cell_no_output_hl', gutter_at(7).virt[1][2], 'CmdlineNotebookSepOk')
+
+-- edits drift the badge with its line
+vim.api.nvim_buf_set_lines(buf, 0, 0, false, { '# comment above' })
+check('sep_drift_follows_edit', gutter_at(8).virt[1][1], '✓ [10]')
+vim.api.nvim_buf_set_lines(buf, 0, 1, false, {})
+
+-- a numeric g:cmdline_notebook_marker_col opts into a fixed column — a
+-- fraction of the window's text width (tracking layout changes via the
+-- VimResized/WinResized repaint) or an absolute column when > 1
+vim.g.cmdline_notebook_marker_col = 0.5
+vim.cmd('doautocmd VimResized')
+local wi = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+local full = math.floor((wi.width - wi.textoff) * 0.5)
+check('sep_badge_fraction_col', gutter_at(7).vcol, full)
+vim.cmd('vsplit')
+vim.cmd('doautocmd WinResized')
+local swi = vim.fn.getwininfo(vim.fn.bufwinid(buf))[1]
+local shalf = math.floor((swi.width - swi.textoff) * 0.5)
+check('sep_badge_tracks_resize',
+  gutter_at(7).vcol == shalf and shalf < full, true)
+vim.cmd('only')
+vim.cmd('doautocmd WinResized')
+check('sep_badge_restores_width', gutter_at(7).vcol, full)
+vim.g.cmdline_notebook_marker_col = 45
+vim.cmd('doautocmd VimResized')
+check('sep_badge_absolute_col', gutter_at(7).vcol, 45)
+-- back to the default: right-aligned again
+vim.g.cmdline_notebook_marker_col = nil
+vim.cmd('doautocmd VimResized')
+check('sep_badge_back_to_right', gutter_at(7).vpos, 'right_align')
+
+-- clearing the cell clears its badge
+render.clear_range(buf, 4, 5)
+check('sep_clear_range_clears_badge', gutter_at(5), nil)
+render.clear_all(buf)
+
+-- ==== separator icon: '# %%' displayed as a horizontal bar, zero shift =====
+-- Ephemeral decoration-provider overlays exist only during a redraw, so this
+-- is asserted at the SCREEN level. The overlay is sized to the token's exact
+-- width — the default single-char '━' REPEATS to fill it, multi-char icons
+-- pad with spaces — so the title after '# %%' must stay at its original
+-- column. The cursor line stays literal for editing; '' disables the icon.
+local ibuf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_lines(ibuf, 0, -1, false, {
+  '# %% alpha',   -- 1
+  'a = 1',        -- 2
+  '# %% beta',    -- 3
+  'b = 2',        -- 4
+})
+vim.api.nvim_win_set_buf(0, ibuf)
+vim.b[ibuf].cmdline_notebook = 1
+vim.api.nvim_win_set_cursor(0, { 2, 0 })
+local function srow(r)
+  local s = {}
+  for c = 1, 24 do s[#s + 1] = vim.fn.screenstring(r, c) end
+  return (table.concat(s):gsub('%s+$', ''))
+end
+vim.cmd('redraw!')
+check('icon_bar_fills_token', srow(1):find('━━━━', 1, true), 1)
+check('icon_covers_whole_token', srow(1):find('%%', 1, true), nil)
+-- same SCREEN column as the literal text (col 6): the 4-cell bar covers
+-- '# %%' exactly. srow() concatenates per-cell strings, so the byte offset
+-- is 4*#'━' + 2
+check('icon_title_not_shifted', srow(1):find('alpha', 1, true), 4 * #'━' + 2)
+check('icon_on_every_separator', srow(3):find('━━━━', 1, true), 1)
+-- the cursor line keeps the literal separator for editing
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+vim.cmd('redraw!')
+check('icon_cursor_line_literal', srow(1):find('# %%', 1, true), 1)
+check('icon_other_lines_still_iconed', srow(3):find('━━━━', 1, true), 1)
+vim.api.nvim_win_set_cursor(0, { 2, 0 })
+-- multi-char icons are left-aligned + space-padded, not repeated
+vim.g.cmdline_notebook_sep_icon = '>>'
+vim.cmd('redraw!')
+check('icon_multichar_padded',
+  srow(1):sub(1, 2) == '>>' and srow(1):find('alpha', 1, true) == 6, true)
+-- inactive buffers (no b:cmdline_notebook) and '' both keep the literal text
+vim.g.cmdline_notebook_sep_icon = ''
+vim.cmd('redraw!')
+check('icon_empty_disables', srow(1):find('# %%', 1, true), 1)
+vim.g.cmdline_notebook_sep_icon = nil
+vim.b[ibuf].cmdline_notebook = nil
+vim.cmd('redraw!')
+check('icon_needs_active_notebook', srow(1):find('# %%', 1, true), 1)
+vim.b[ibuf].cmdline_notebook = 1
+-- an icon WIDER than the token would cover the title: overlay disabled
+vim.g.cmdline_notebook_sep_icon = '>>>>>'
+vim.cmd('redraw!')
+check('icon_wider_than_token_disabled', srow(1):find('# %%', 1, true), 1)
+vim.g.cmdline_notebook_sep_icon = nil
+vim.api.nvim_win_set_buf(0, buf)
+
 -- ---- config resolution ----------------------------------------------------
 package.loaded['vimcmdline.notebook.config'] = nil
 local config = require('vimcmdline.notebook.config')
+vim.g.cmdline_notebook_exec_marker = 'separator'
+check('cfg_separator', config.read().exec_marker, 'separator')
 vim.g.cmdline_notebook_exec_marker = 'left'
 check('cfg_left', config.read().exec_marker, 'left')
 vim.g.cmdline_notebook_exec_marker = 1
@@ -192,12 +344,12 @@ vim.g.cmdline_notebook_exec_marker = 'below'
 check('cfg_below', config.read().exec_marker, 'below')
 vim.g.cmdline_notebook_exec_marker = 0
 check('cfg_off', config.read().exec_marker, false)
--- 'left' is the default at BOTH default sites: config.lua's fallback (unset
--- global) and the plugin's materialized g: value (captured at source time,
--- before this section mutated it).
+-- 'separator' is the default at BOTH default sites: config.lua's fallback
+-- (unset global) and the plugin's materialized g: value (captured at source
+-- time, before this section mutated it).
 vim.g.cmdline_notebook_exec_marker = nil
-check('cfg_default_left', config.read().exec_marker, 'left')
-check('plugin_materialized_default', plugin_default_marker, 'left')
+check('cfg_default_separator', config.read().exec_marker, 'separator')
+check('plugin_materialized_default', plugin_default_marker, 'separator')
 
 if fail > 0 then
   vim.cmd('cquit!')

@@ -2,7 +2,7 @@
 
 Maintainer:      xuesoso <xuesoso@gmail.com>  https://github.com/xuesoso/europa
 Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>  (vimcmdline)
-Version:         2.6.1
+Version:         2.7.0
 License:         GPL v2 or later (see plugin/vimcmdline.vim)
 
 ==============================================================================
@@ -475,7 +475,29 @@ cmdline_notebook_figure_cell_aspect  Terminal cell height/width ratio used to
 cmdline_notebook_exec_marker  Where to mark each executed cell with its
 			execution count N and run status. Values:
 
-			'left' (default)~
+			'separator' (default)~
+			A "✓ [N]" badge drawn as virtual text on the cell's
+			own LAST line — the row just above the next "# %%",
+			or simply the cell's end for the final block (one
+			uniform rule, never on a separator line) — at the
+			window column set by |cmdline_notebook_marker_col|
+			(default: right-aligned to the window edge). Green
+			on success, ORANGE on error ("✗ [N]"; "✗" for an
+			aborted cell, which has no count), a yellow "●" while
+			queued/running. Zero cost by construction: the line
+			exists anyway, right-aligned virtual text never
+			shifts buffer text, and a cell that has not run gets
+			NOTHING drawn — its "# %%" stays plain comment color,
+			which is the not-run state. The badge sits directly
+			above the cell's output box, so no marker is embedded
+			in the box border in this style. The badge drifts
+			with buffer edits and is removed when the cell reruns
+			or its output is cleared. Colors:
+				CmdlineNotebookSepOk  → DiagnosticOk
+				CmdlineNotebookSepErr   orange (own colors)
+				CmdlineNotebookSepRun → DiagnosticWarn
+
+			'left'~
 			Drawn in the 'signcolumn', costing no vertical space
 			and never shifting any text: a colored bar spans the
 			cell (separator line included), and the separator
@@ -513,6 +535,37 @@ cmdline_notebook_exec_marker  Where to mark each executed cell with its
 
 			0~
 			No marker at all.
+
+							*cmdline_notebook_marker_col*
+cmdline_notebook_marker_col  Window column of the 'separator' run-marker
+			badge. 'right' (the default) right-aligns the badge
+			to the window edge. A number <= 1 is a fraction of
+			the window's text width (0.5 = mid-window); a value
+			> 1 is an absolute text column. Applied live: badges
+			repaint when the window layout changes. Line text
+			long enough to reach a fixed column runs under the
+			badge (the badge overlays it; buffer text itself
+			never moves).
+
+							*cmdline_notebook_sep_icon*
+cmdline_notebook_sep_icon  Icon displayed in place of the separator token
+			("# %%") in ACTIVE notebook buffers when the
+			'separator' marker style is in use. Default: "━" — a
+			SINGLE character repeats to fill the token's width,
+			rendering the separator as a solid horizontal bar
+			(blue by default via CmdlineNotebookSepIcon, matching
+			the output border accent; box-drawing, the same
+			family the borders already require). Multi-character
+			values (">>", "»") are shown as-is, space-padded.
+			Display-only: an overlay padded to exactly the
+			token's width, so no character after "# %%" ever
+			shifts and the file text is untouched. The line under
+			the cursor shows the literal text for editing. An
+			icon wider than the token would cover the title, so
+			it disables the overlay; set '' to keep the literal
+			separator everywhere. Icons are uniformly colored via
+			CmdlineNotebookSepIcon (default: border blue): run
+			status lives in the badges, not on separators.
 
 ==============================================================================
 8. Adding support for a new language			*vimcmdline_newlang*

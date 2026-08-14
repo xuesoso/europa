@@ -61,7 +61,7 @@ echo "== inline figures: default-config gate refuses incapable terminal =="
 echo "== notebook: collapse code / presentation view =="
 "$NVIM" --headless -u NONE -N -l test/collapse_test.lua || rc=1
 
-echo "== notebook: left-gutter run marker (exec_marker = 'left') =="
+echo "== notebook: run markers (separator badge / left gutter / sep icon) =="
 "$NVIM" --headless -u NONE -N -l test/gutter_marker_test.lua || rc=1
 
 echo "== retention: elision equivalence/invariants, flat streaming cost =="

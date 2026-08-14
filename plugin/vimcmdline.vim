@@ -16,14 +16,14 @@
 " Maintainer: xuesoso <xuesoso@gmail.com>  (https://github.com/xuesoso/europa)
 " A fork of vimcmdline by Jakson Alves de Aquino <jalvesaq@gmail.com>.
 " Original author: Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Version: 2.6.1
+" Version: 2.7.0
 "==========================================================================
 
 if exists("g:did_cmdline")
     finish
 endif
 let g:did_cmdline = 1
-let g:cmdline_version = "2.6.1"
+let g:cmdline_version = "2.7.0"
 
 " Set option
 if has("nvim")
@@ -91,9 +91,22 @@ let g:cmdline_notebook_kernel_timeout = get(g:, 'cmdline_notebook_kernel_timeout
 let g:cmdline_notebook_border = get(g:, 'cmdline_notebook_border', 'rounded')
 let g:cmdline_notebook_statusline = get(g:, 'cmdline_notebook_statusline', 1)
 let g:cmdline_notebook_output_win = get(g:, 'cmdline_notebook_output_win', 'float')
-" Run-status marker: 'left' (default — count + status color in the sign
-" column), 'below'/1 (in the output border / rule line), 0 (off).
-let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 'left')
+" Run-status marker: 'separator' (default — ✓ [N] right-aligned on the
+" cell's own last line; green ok / orange error / yellow ● running),
+" 'left' (count + status color in the sign column), 'below'/1 (in the output
+" border / rule line), 0 (off).
+let g:cmdline_notebook_exec_marker = get(g:, 'cmdline_notebook_exec_marker', 'separator')
+" Column of the 'separator' badge: 'right' (default) right-aligns it to the
+" window edge; a number <= 1 is a fraction of the window's text width
+" (0.5 = mid-window), > 1 an absolute text column.
+let g:cmdline_notebook_marker_col = get(g:, 'cmdline_notebook_marker_col', 'right')
+" Icon displayed over the '# %%' token in active notebook buffers
+" ('separator' style; display-only overlay, the file text is untouched).
+" A single character repeats to fill the token's width — the default '━'
+" renders the separator as a solid horizontal bar (blue, see
+" CmdlineNotebookSepIcon). Multi-character values ('>>', '»') are shown
+" as-is; '' keeps the literal separator.
+let g:cmdline_notebook_sep_icon = get(g:, 'cmdline_notebook_sep_icon', '━')
 let g:cmdline_notebook_figure_size = get(g:, 'cmdline_notebook_figure_size', 50)
 let g:cmdline_notebook_figure_dpi = get(g:, 'cmdline_notebook_figure_dpi', 200)
 let g:cmdline_notebook_figure_cell_aspect = get(g:, 'cmdline_notebook_figure_cell_aspect', 2.0)
@@ -957,6 +970,19 @@ if has('nvim') && g:cmdline_notebook_enable
         hi default link CmdlineNotebookGutterOk  DiagnosticOk
         hi default link CmdlineNotebookGutterErr DiagnosticError
         hi default link CmdlineNotebookGutterRun DiagnosticWarn
+        " Separator-badge marker (g:cmdline_notebook_exec_marker =
+        " 'separator'). Err is ORANGE by design (not the usual red) and has
+        " no standard group to link to, so it gets explicit colors.
+        hi default link CmdlineNotebookSepOk  DiagnosticOk
+        hi default CmdlineNotebookSepErr ctermfg=172 guifg=#e5883d
+        hi default link CmdlineNotebookSepRun DiagnosticWarn
+        " The '# %%' → bar/icon overlay on separator lines. Blue by default,
+        " matching the output border accent.
+        if &t_Co == 256
+            hi default CmdlineNotebookSepIcon ctermfg=25 guifg=#005faf
+        else
+            hi default CmdlineNotebookSepIcon ctermfg=darkblue guifg=#005faf
+        endif
         if exists('g:cmdline_notebook_border_color') && !empty(g:cmdline_notebook_border_color)
             let l:c = g:cmdline_notebook_border_color
             if l:c =~? '^#[a-f0-9]\{6}$'

@@ -25,14 +25,16 @@ function M.read()
   cfg.kernel_timeout = tonumber(gget('cmdline_notebook_kernel_timeout', 30)) or 30
   cfg.border = gget('cmdline_notebook_border', 'rounded')
   cfg.output_win = gget('cmdline_notebook_output_win', 'float')
-  -- Run-marker placement: 'below' (the "✓ [N]" in the output box border, or a
-  -- rule line for cells with no output), 'left' (colored bar in the sign
-  -- column spanning the cell, the separator line's sign showing the execution
-  -- count — costs no buffer lines and never shifts text), or false (no
-  -- marker). Legacy boolean values map onto 'below'/off.
-  local marker = gget('cmdline_notebook_exec_marker', 'left')
-  if marker == 'left' then
-    cfg.exec_marker = 'left'
+  -- Run-marker placement: 'separator' (default — a "✓ [N]" badge right-
+  -- aligned on the cell's own LAST line; zero lines, zero text shift, no
+  -- border marker), 'left' (colored bar in the sign column spanning the
+  -- cell, the separator line's sign showing the execution count), 'below'
+  -- (the "✓ [N]" in the output box border, or a rule line for cells with no
+  -- output), or false (no marker). Legacy boolean values map onto
+  -- 'below'/off.
+  local marker = gget('cmdline_notebook_exec_marker', 'separator')
+  if marker == 'separator' or marker == 'left' then
+    cfg.exec_marker = marker
   elseif marker == 'below' or truthy(marker) then
     cfg.exec_marker = 'below'
   else

@@ -4,10 +4,10 @@ local image = require('vimcmdline.notebook.image')
 local M = {}
 
 M.ns = vim.api.nvim_create_namespace('vimcmdline_notebook')
--- Left-gutter run marker (exec_marker = 'left'). Its marks live in their OWN
--- namespace: anchor_rows() treats every M.ns extmark as an output anchor, and
--- the collapse view would pin every bar-decorated code line visible if the
--- gutter shared it.
+-- Run-marker decorations: the 'left' style's gutter signs AND the
+-- 'separator' style's end-of-cell badges. They live in their OWN namespace:
+-- anchor_rows() treats every M.ns extmark as an output anchor, and the
+-- collapse view would pin every decorated line visible if they shared it.
 M.gutter_ns = vim.api.nvim_create_namespace('vimcmdline_notebook_gutter')
 
 -- bufnr -> { cells = { [cell_id] = {end_line,start_line,segments,mark_id,pending,max_lines} } }
@@ -788,13 +788,15 @@ local function redraw(bufnr, cell_id)
   local lines = display_lines(c)
   -- The run marker ("✓ [N]" / "✗ [N]") is drawn in the border once finished:
   -- embedded in the top border for cells with output, or as a single rule line
-  -- for cells with none. In 'left' marker mode the gutter always carries the
-  -- status, so the border marker is drawn ONLY where it is free — embedded in
-  -- a top border that exists anyway. It must never cost a line there: no rule
-  -- line for output-less cells, and no leading title line when the border
-  -- style draws no box (build_virt's borderless fallback).
+  -- for cells with none. In 'left' mode the gutter carries the status, so the
+  -- border marker is drawn ONLY where it is free — embedded in a top border
+  -- that exists anyway, never costing a line (no rule line for output-less
+  -- cells, no leading title line when the border style draws no box —
+  -- build_virt's borderless fallback). In 'separator' mode there is no border
+  -- marker at all: the end-of-cell badge sits directly above the output box,
+  -- and embedding the same "✓ [N]" two rows below it would just duplicate it.
   local title = nil
-  if c.marker and c.done
+  if c.marker and c.done and c.marker ~= 'separator'
       and (c.marker ~= 'left' or (#lines > 0 and BORDERS[c.border] ~= nil)) then
     local label = c.ok and '✓' or '✗'
     -- Guard the format: an aborted cell has no execution count (see mark_done),
@@ -903,6 +905,60 @@ local function badge_sign(c)
   return '✗'
 end
 
+-- Separator-badge marker (cmdline_notebook_exec_marker = 'separator', the
+-- default): a "✓ [N]" / "✗ [N]" badge drawn as virtual text on the cell's
+-- own LAST line — the row just above the next '# %%', or the cell's end for
+-- the final block (one uniform rule; see make_sep_badge). Zero cost by
+-- construction: the line exists anyway, right-aligned/fixed-column virt_text
+-- never shifts buffer text, an unrun cell gets nothing drawn at all (its
+-- '# %%' stays plain comment color, which IS the not-run state), and the
+-- border-embedded marker is suppressed in this style — the badge sits right
+-- above the output box, so embedding would duplicate it two rows apart.
+-- Err is orange, not red, per the style's design.
+local SEP_HL = {
+  run = 'CmdlineNotebookSepRun',
+  ok  = 'CmdlineNotebookSepOk',
+  err = 'CmdlineNotebookSepErr',
+}
+
+local function sep_badge_text(c)
+  if not c.done then
+    return '●'
+  end
+  local label = c.ok and '✓' or '✗'
+  -- Aborted cells have no execution count (see mark_done).
+  if type(c.count) == 'number' then
+    label = label .. (' [%d]'):format(c.count)
+  end
+  return label
+end
+
+-- Window column for the separator badge, from g:cmdline_notebook_marker_col:
+-- 'right' (the default) means right-aligned to the window edge — returned as
+-- nil, the caller uses virt_text_pos='right_align'. A number <= 1 is a
+-- fraction of the window's text width (0.5 = mid-window); > 1 an absolute
+-- text column. Read at paint time from the first window showing the buffer;
+-- the resize autocmd below repaints badges so a fixed column tracks layout
+-- changes.
+local function sep_badge_col(bufnr)
+  local frac = tonumber(vim.g.cmdline_notebook_marker_col)
+  if not frac then
+    return nil
+  end
+  local win = vim.fn.bufwinid(bufnr)
+  local width
+  if win ~= -1 then
+    local info = vim.fn.getwininfo(win)[1]
+    width = vim.api.nvim_win_get_width(win) - (info and info.textoff or 0)
+  else
+    width = vim.o.columns
+  end
+  if frac > 1 then
+    return math.max(0, math.min(math.floor(frac), width - 1))
+  end
+  return math.max(0, math.floor(width * frac))
+end
+
 local function free_gutter(bufnr, c)
   for _, id in ipairs(c.gutter_ids or {}) do
     pcall(vim.api.nvim_buf_del_extmark, bufnr, M.gutter_ns, id)
@@ -915,21 +971,46 @@ end
 -- cell ran don't snap the bar back to stale coordinates; marks whose line was
 -- deleted (invalidated) stay dead rather than resurrecting elsewhere.
 local function paint_gutter(bufnr, c)
-  local hl = GUTTER_HL[gutter_state(c)]
+  local st = gutter_state(c)
   for i, id in ipairs(c.gutter_ids or {}) do
     local ok, pos = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, M.gutter_ns, id,
                           { details = true })
     if ok and pos and #pos > 0 and not (pos[3] and pos[3].invalid) then
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, M.gutter_ns, pos[1], 0, {
-        id = id,
-        sign_text = i == 1 and badge_sign(c) or GUTTER_BAR,
-        sign_hl_group = hl,
-        priority = GUTTER_PRIORITY,
-        invalidate = true,
-        undo_restore = false,
-      })
+      local opts
+      if c.marker == 'separator' then
+        opts = {
+          id = id,
+          virt_text = { { sep_badge_text(c), SEP_HL[st] } },
+          invalidate = true,
+          undo_restore = false,
+        }
+        local col = sep_badge_col(bufnr)
+        if col then
+          opts.virt_text_win_col = col
+        else
+          opts.virt_text_pos = 'right_align'
+        end
+      else -- 'left'
+        opts = {
+          id = id,
+          sign_text = i == 1 and badge_sign(c) or GUTTER_BAR,
+          sign_hl_group = GUTTER_HL[st],
+          priority = GUTTER_PRIORITY,
+          invalidate = true,
+          undo_restore = false,
+        }
+      end
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, M.gutter_ns, pos[1], 0, opts)
     end
   end
+end
+
+local function sep_token()
+  local sep = vim.g.cmdline_block_sep
+  if type(sep) ~= 'string' or sep == '' then
+    sep = '# %%'
+  end
+  return sep
 end
 
 local function make_gutter(bufnr, c)
@@ -937,10 +1018,7 @@ local function make_gutter(bufnr, c)
   -- The executed range starts BELOW the '# %%' line, but visually the marker
   -- belongs to the whole cell: start on the separator when there is one.
   local first = c.start_line
-  local sep = vim.g.cmdline_block_sep
-  if type(sep) ~= 'string' or sep == '' then
-    sep = '# %%'
-  end
+  local sep = sep_token()
   if first > 1 then
     local above = vim.api.nvim_buf_get_lines(bufnr, first - 2, first - 1, false)[1] or ''
     if above:find(sep, 1, true) then
@@ -964,6 +1042,165 @@ local function make_gutter(bufnr, c)
   c.gutter_ids = ids
   paint_gutter(bufnr, c)  -- turns the first mark's sign into the badge
 end
+
+-- Place the run badge on the cell's own LAST executed line — the row just
+-- above the next '# %%' in the common case, and simply the end of the cell
+-- for the final block. One uniform rule: the badge lives INSIDE its cell,
+-- never on a separator line, so the last cell (no '# %%' below) needs no
+-- special case and separator lines stay purely icon + title. The mark drifts
+-- with edits like everything else; if its line is deleted it invalidates
+-- rather than jumping to an unrelated line.
+local function make_sep_badge(bufnr, c)
+  free_gutter(bufnr, c)
+  local row = math.min(c.end_line, vim.api.nvim_buf_line_count(bufnr)) - 1
+  local mopts = {
+    virt_text = { { sep_badge_text(c), SEP_HL.run } },
+    invalidate = true,
+    undo_restore = false,
+  }
+  local col = sep_badge_col(bufnr)
+  if col then
+    mopts.virt_text_win_col = col
+  else
+    mopts.virt_text_pos = 'right_align'
+  end
+  local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, M.gutter_ns, row, 0, mopts)
+  if ok then
+    c.gutter_ids = { id }
+  end
+end
+
+-- Separator icon: in 'separator' marker style, every '# %%' token in an
+-- ACTIVE notebook buffer (b:cmdline_notebook == 1) is displayed as a
+-- horizontal bar (g:cmdline_notebook_sep_icon, default '━' — box-drawing,
+-- the same family the output borders already require; a single-character
+-- icon repeats to fill the token's width), drawn as an OVERLAY sized to
+-- exactly the token's display width — characters after '# %%' never move
+-- and are never covered. Ephemeral decoration-provider marks: recomputed
+-- per redraw for visible lines only, nothing stored, edits and brand-new
+-- separators tracked for free. The line under the cursor is left literal so
+-- the real text is visible while editing it. Icons are uniformly colored by
+-- CmdlineNotebookSepIcon (default: the plugin's border blue): run status
+-- lives entirely in the badge on each cell's last line, never on separators.
+M.icon_ns = vim.api.nvim_create_namespace('vimcmdline_notebook_sep_icon')
+
+local icon_cache = { key = nil, overlay = nil }
+local function sep_icon_overlay()
+  local icon = vim.g.cmdline_notebook_sep_icon
+  if icon == nil then
+    icon = '━'
+  end
+  if type(icon) ~= 'string' or icon == '' then
+    return nil
+  end
+  local sep = sep_token()
+  local key = sep .. '\0' .. icon
+  if icon_cache.key ~= key then
+    icon_cache.key = key
+    local tw = vim.fn.strdisplaywidth(sep)
+    local iw = vim.fn.strdisplaywidth(icon)
+    if iw > tw then
+      -- An icon WIDER than the token would cover characters beyond it:
+      -- disable the overlay instead.
+      icon_cache.overlay = nil
+    elseif vim.fn.strchars(icon) == 1 and iw > 0 then
+      -- A single-character icon REPEATS to fill the token's width — the
+      -- default '━' renders '# %%' as a solid horizontal bar, whatever
+      -- width the separator token has.
+      icon_cache.overlay = icon:rep(math.floor(tw / iw))
+        .. string.rep(' ', tw % iw)
+    else
+      -- Multi-character icons are left-aligned and space-padded.
+      icon_cache.overlay = icon .. string.rep(' ', tw - iw)
+    end
+  end
+  return icon_cache.overlay, sep
+end
+
+local function marker_is_separator()
+  local m = vim.g.cmdline_notebook_exec_marker
+  return m == nil or m == 'separator'
+end
+
+vim.api.nvim_set_decoration_provider(M.icon_ns, {
+  on_win = function(_, win, bufnr, top, bot)
+    if vim.b[bufnr].cmdline_notebook ~= 1 or not marker_is_separator() then
+      return false
+    end
+    local overlay, sep = sep_icon_overlay()
+    if not overlay then
+      return false
+    end
+    local currow = vim.api.nvim_win_get_cursor(win)[1] - 1
+    local lines = vim.api.nvim_buf_get_lines(bufnr, top, bot + 1, false)
+    for i, line in ipairs(lines) do
+      local row = top + i - 1
+      if row ~= currow then
+        local s = line:find(sep, 1, true)
+        if s then
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, M.icon_ns, row, s - 1, {
+            virt_text = { { overlay, 'CmdlineNotebookSepIcon' } },
+            virt_text_pos = 'overlay',
+            ephemeral = true,
+          })
+        end
+      end
+    end
+    return false
+  end,
+})
+
+-- Moving the cursor onto/off a separator line must swap literal text and
+-- icon, but cursor motion alone does not damage those lines, so nvim would
+-- keep the stale paint. Force a redraw of exactly the separator line the
+-- cursor left and the one it entered (guarded: nvim__redraw is 0.10+).
+local icon_last_row = {}
+vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
+  group = vim.api.nvim_create_augroup('VimCmdLineSepIcon', {}),
+  callback = function(ev)
+    local bufnr = ev.buf
+    if vim.b[bufnr].cmdline_notebook ~= 1 or not marker_is_separator() then
+      return
+    end
+    local overlay, sep = sep_icon_overlay()
+    if not overlay then
+      return
+    end
+    local win = vim.api.nvim_get_current_win()
+    local row = vim.api.nvim_win_get_cursor(win)[1] - 1
+    local last = icon_last_row[win]
+    if last == row then
+      return
+    end
+    icon_last_row[win] = row
+    local linecount = vim.api.nvim_buf_line_count(bufnr)
+    for _, r in ipairs({ last, row }) do
+      if r and r < linecount then
+        local line = vim.api.nvim_buf_get_lines(bufnr, r, r + 1, false)[1]
+        if line and line:find(sep, 1, true) then
+          pcall(vim.api.nvim__redraw, { win = win, range = { r, r + 1 }, valid = false })
+        end
+      end
+    end
+  end,
+})
+
+-- Separator badges sit at a window-width-relative column, so a layout change
+-- must repaint them there. Cheap: a handful of extmarks, on a rare event.
+vim.api.nvim_create_autocmd({ 'VimResized', 'WinResized' }, {
+  group = vim.api.nvim_create_augroup('VimCmdLineSepBadge', {}),
+  callback = function()
+    for bufnr, s in pairs(state) do
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        for _, c in pairs(s.cells) do
+          if c.marker == 'separator' and c.gutter_ids then
+            paint_gutter(bufnr, c)
+          end
+        end
+      end
+    end
+  end,
+})
 
 -- Begin a fresh cell run: clear any prior output anchored in the cell's range.
 -- `max_kept` is the retention cap (nil => 10000 default; 0 => unlimited).
@@ -1015,6 +1252,8 @@ function M.begin(bufnr, cell_id, start_line, end_line, max_lines, border, marker
   }
   if marker == 'left' then
     make_gutter(bufnr, s.cells[cell_id])
+  elseif marker == 'separator' then
+    make_sep_badge(bufnr, s.cells[cell_id])
   end
 end
 
